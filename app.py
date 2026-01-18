@@ -5,7 +5,7 @@ import base64
 st.set_page_config(page_title="English Tutor FWB Pro", layout="centered")
 api_key = st.secrets.get("OPENAI_API_KEY", "")
 
-# 2. Le code HTML pur
+# 2. Le code HTML
 raw_html = """
 <!DOCTYPE html>
 <html lang="fr">
@@ -87,9 +87,12 @@ raw_html = """
         grid.appendChild(b);
     });
     const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const rec = new Speech(); rec.lang = 'en-US';
-    document.getElementById('mic').onclick = () => { try { rec.start(); } catch(e) {} };
-    rec.onstart = () => { document.getElementById('mic').classList.add('listening'); document.getElementById('status').innerText = "Listening..."; };
+    if (!Speech) {
+        alert("Attention: La reconnaissance vocale n'est pas supportée sur ce navigateur. Utilisez Chrome.");
+    }
+    const rec = new Speech(); rec.lang = 'en-US'; rec.continuous = false;
+    document.getElementById('mic').onclick = () => { try { rec.start(); } catch(e) { console.log(e); } };
+    rec.onstart = () => { document.getElementById('mic').classList.add('listening'); document.getElementById('status').innerText = "I am listening..."; };
     rec.onresult = (e) => { callOpenAI(e.results[0][0].transcript); };
     rec.onend = () => { document.getElementById('mic').classList.remove('listening'); document.getElementById('status').innerText = "Click to talk"; };
     async function callOpenAI(userText) {
@@ -123,12 +126,12 @@ raw_html = """
 </html>
 """
 
-# 3. Sécurisation totale : On injecte la clé puis on encode tout en Base64
+# 3. Remplacement et encodage
 final_html = raw_html.replace("TOKEN_KEY", api_key)
 b64_html = base64.b64encode(final_html.encode()).decode()
 
-# 4. Affichage via un IFrame pour éviter que Streamlit ne lise le contenu
+# 4. AFFICHAGE AVEC AUTORISATION MICRO
 st.components.v1.html(
-    f'<iframe src="data:text/html;base64,{b64_html}" style="width:100%; height:800px; border:none;"></iframe>',
+    f'<iframe src="data:text/html;base64,{b64_html}" style="width:100%; height:800px; border:none;" allow="microphone"></iframe>',
     height=800
 )
