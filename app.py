@@ -4,7 +4,7 @@ import streamlit as st
 st.set_page_config(page_title="English Tutor FWB", layout="centered")
 api_key = st.secrets.get("OPENAI_API_KEY", "")
 
-# 2. Construction sécurisée du HTML sans f-string pour éviter les erreurs Python
+# 2. Construction du HTML
 part1 = """
 <!DOCTYPE html>
 <html>
@@ -19,13 +19,13 @@ part1 = """
         .settings-bar { padding: 10px; background: #eee; border-bottom: 1px solid #ddd; }
         .challenge-box { background: #FEF9E7; padding: 8px; border: 1px dashed var(--gold); border-radius: 5px; font-size: 0.85rem; color: #7D6608; text-align: center; font-weight: bold; }
         .topics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 10px; border-bottom: 2px solid #ddd; }
-        .t-btn { font-size: 0.7rem; padding: 8px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; background: white; }
-        .t-btn.active { background: var(--s); color: white; }
+        .t-btn { font-size: 0.7rem; padding: 8px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; background: white; text-align: center; }
+        .t-btn.active { background: var(--s); color: white; border-color: var(--s); }
         #chat { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #fafafa; }
         .msg { max-width: 85%; padding: 12px; border-radius: 18px; line-height: 1.4; font-size: 1rem; word-wrap: break-word; }
         .user { align-self: flex-end; background: var(--s); color: white; border-bottom-right-radius: 2px; }
         .ai { align-self: flex-start; background: white; border: 1px solid #ddd; border-bottom-left-radius: 2px; }
-        .controls { padding: 20px; text-align: center; border-top: 1px solid #eee; }
+        .controls { padding: 20px; text-align: center; border-top: 1px solid #eee; background: white; }
         #mic { width: 70px; height: 70px; border-radius: 50%; border: none; background: var(--err); color: white; font-size: 1.8rem; cursor: pointer; }
         #mic.listening { background: var(--ok); animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(39,174,96, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(39,174,96, 0); } }
@@ -35,7 +35,7 @@ part1 = """
 <div class="app">
     <header><b>English Tutor FWB 🇧🇪</b> <div>⭐ <span id="score-val">0</span></div></header>
     <div class="settings-bar">
-        <select id="lvl" style="width:100%; margin-bottom:5px;">
+        <select id="lvl" style="width:100%; margin-bottom:5px; padding:5px;">
             <option value="A1">Niveau P3-P6 (A1)</option>
             <option value="A2.1">Niveau S1-S2 (A2.1)</option>
             <option value="A2.2">Niveau S3 (A2.2)</option>
@@ -43,10 +43,10 @@ part1 = """
         <div class="challenge-box" id="challenge-txt">Challenge: Use "NAME" (+50 pts)</div>
     </div>
     <div class="topics" id="t-grid"></div>
-    <div id="chat"><div class="msg ai">Hello! I'm your tutor. Click the mic to speak!</div></div>
+    <div id="chat"><div class="msg ai">Hello! I'm your tutor. Choose a topic and click the mic to speak!</div></div>
     <div class="controls">
         <button id="mic">🎤</button>
-        <p id="status" style="font-size:0.8rem; color:#666;">Click to talk</p>
+        <p id="status" style="font-size:0.8rem; color:#666; margin-top:10px;">Click to talk</p>
     </div>
 </div>
 <script>
@@ -76,22 +76,24 @@ part3 = """
         b.innerHTML = f.e + "<br>" + f.n;
         b.onclick = () => {
             topic = f.n;
-            challengeWord = f.w.split(', ')[0];
+            const words = f.w.split(', ');
+            challengeWord = words[Math.floor(Math.random() * words.length)];
             document.getElementById('challenge-txt').innerText = "Challenge: Use \\"" + challengeWord.toUpperCase() + "\\" (+50 pts)";
             document.querySelectorAll('.t-btn').forEach(x => x.classList.remove('active'));
             b.classList.add('active');
+            addMsg("Topic: " + f.n + ". Let's practice!", 'ai');
             history = [];
         };
         grid.appendChild(b);
     });
 
     const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Speech) alert("Use Chrome or Edge for microphone support!");
     const rec = new Speech();
     rec.lang = 'en-US';
+    rec.interimResults = false;
 
     document.getElementById('mic').onclick = () => {
-        try { rec.start(); } catch(e) { console.error(e); }
+        try { rec.start(); } catch(e) { console.log("Micro already active"); }
     };
 
     rec.onstart = () => {
@@ -111,11 +113,19 @@ part3 = """
 
     async function callAI(userText) {
         addMsg(userText, 'user');
-        let bonus = userText.toLowerCase().includes(challengeWord.toLowerCase()) ? 50 : 0;
+        
+        let bonus = 0;
+        if (userText.toLowerCase().includes(challengeWord.toLowerCase())) {
+            bonus = 50;
+        }
+
         const level = document.getElementById('lvl').value;
         const currentField = FIELDS.find(f => f.n === topic);
         
-        const systemPrompt = "Friendly English Tutor (Belgium). Level: " + level + ". Topic: " + topic + ". Rules: 1 short sentence, correct errors like 'You said... but it's better to say...', end with 1 question.";
+        // Prompt avec tolérance pour le prénom Laurence / Lawrence
+        const systemPrompt = "Act as a friendly English Tutor (FWB Belgium). Level: " + level + ". Topic: " + topic + ". " +
+        "Note: The student has a French name. If you hear 'Lawrence' or 'Lauren', they mean 'Laurence'. " +
+        "Rules: 1 short sentence response, correct errors gently (You said... but it's better to say...), end with 1 simple question.";
         
         try {
             const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -128,15 +138,22 @@ part3 = """
             });
             const d = await r.json();
             const reply = d.choices[0].message.content;
-            addMsg(reply, 'ai');
-            if (bonus > 0) addMsg("🎯 Bonus Challenge +50!", "ai");
             
-            const u = new SpeechSynthesisUtterance(reply); u.lang = 'en-US'; window.speechSynthesis.speak(u);
+            addMsg(reply, 'ai');
+            if (bonus > 0) addMsg("🎯 Bonus Challenge +50 points!", "ai");
+            
+            const u = new SpeechSynthesisUtterance(reply); 
+            u.lang = 'en-US'; 
+            u.rate = 0.9;
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(u);
             
             history.push({role:"user", content:userText}, {role:"assistant", content:reply});
             score += (10 + bonus);
             document.getElementById('score-val').innerText = score;
-        } catch(e) { addMsg("Error. Check API Key.", "ai"); }
+        } catch(e) { 
+            addMsg("Connection error. Please try again.", "ai"); 
+        }
     }
 
     function addMsg(t, cl) {
@@ -152,5 +169,4 @@ part3 = """
 </html>
 """
 
-# 3. Affichage direct (sans Base64, sans IFrame complexe)
 st.components.v1.html(part1 + part2 + part3, height=800)
