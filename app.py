@@ -1,13 +1,12 @@
 import streamlit as st
+import base64
 
-# 1. Configuration de la page
+# 1. Configuration
 st.set_page_config(page_title="English Tutor FWB Pro", layout="centered")
-
-# 2. Récupération sécurisée de la clé
 api_key = st.secrets.get("OPENAI_API_KEY", "")
 
-# 3. Le template HTML (Utilisation d'une Raw String r\"\"\" pour éviter les erreurs de syntaxe)
-html_template = r"""
+# 2. Le code HTML pur
+raw_html = """
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -30,4 +29,106 @@ html_template = r"""
         .ai { align-self: flex-start; background: white; border: 1px solid #ddd; color: #333; border-bottom-left-radius: 2px; }
         .controls { padding: 20px; text-align: center; border-top: 1px solid #eee; background: white; }
         #mic { width: 70px; height: 70px; border-radius: 50%; border: none; background: var(--err); color: white; font-size: 1.8rem; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); outline: none; }
-        #mic.listening { background: var(--ok); animation:
+        #mic.listening { background: var(--ok); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(39,174,96, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(39,174,96, 0); } }
+    </style>
+</head>
+<body>
+<div class="app">
+    <header>
+        <div style="font-weight:bold;">English Tutor FWB 🇧🇪</div>
+        <div>⭐ <span id="score-val">0</span></div>
+    </header>
+    <div class="settings-bar">
+        <select id="lvl">
+            <option value="A1 (P3-P6)">Niveau P3-P6 (A1)</option>
+            <option value="A2.1 (S1-S2)">Niveau S1-S2 (A2.1)</option>
+            <option value="A2.2 (S3)">Niveau S3 (A2.2)</option>
+        </select>
+        <div class="challenge-box" id="challenge-txt">Challenge: Use the word "NAME" for +50 pts!</div>
+    </div>
+    <div class="topics" id="t-grid"></div>
+    <div id="chat">
+        <div class="msg ai">Hello! I'm your tutor. Choose a topic and let's speak!</div>
+    </div>
+    <div class="controls">
+        <button id="mic">🎤</button>
+        <p id="status" style="margin-top:10px; color:#666; font-size:0.8rem;">Click to talk</p>
+    </div>
+</div>
+<script>
+    const API_KEY = "TOKEN_KEY";
+    const FIELDS = [
+        { n: 'Identity', e: '👤', w: 'name, age, brother, sister, Belgium' }, 
+        { n: 'House', e: '🏠', w: 'bedroom, kitchen, garden, chair, table' }, 
+        { n: 'Hobbies', e: '⚽', w: 'football, music, video games, swimming' }, 
+        { n: 'Food', e: '🍕', w: 'apple, bread, breakfast, hungry, thirsty' },
+        { n: 'Shopping', e: '🛍️', w: 'buy, price, shop, money, expensive' },
+        { n: 'Health', e: '🍎', w: 'headache, doctor, fruit, vegetable, sport' },
+        { n: 'Travel', e: '🚲', w: 'bus, train, bike, holiday, hotel' },
+        { n: 'Time', e: '⏰', w: 'monday, morning, night, weekend, o-clock' }
+    ];
+    let topic = "Identity"; let challengeWord = "name"; let score = 0; let history = [];
+    const grid = document.getElementById('t-grid');
+    FIELDS.forEach((f, i) => {
+        const b = document.createElement('button');
+        b.className = "t-btn " + (i === 0 ? "active" : "");
+        b.innerHTML = f.e + "<br>" + f.n;
+        b.onclick = () => {
+            topic = f.n;
+            const words = f.w.split(', ');
+            challengeWord = words[Math.floor(Math.random() * words.length)];
+            document.getElementById('challenge-txt').innerText = "Challenge: Use the word \\"" + challengeWord.toUpperCase() + "\\" for +50 pts!";
+            document.querySelectorAll('.t-btn').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+            addMsg("Topic: " + f.n, 'ai');
+            history = [];
+        };
+        grid.appendChild(b);
+    });
+    const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new Speech(); rec.lang = 'en-US';
+    document.getElementById('mic').onclick = () => { try { rec.start(); } catch(e) {} };
+    rec.onstart = () => { document.getElementById('mic').classList.add('listening'); document.getElementById('status').innerText = "Listening..."; };
+    rec.onresult = (e) => { callOpenAI(e.results[0][0].transcript); };
+    rec.onend = () => { document.getElementById('mic').classList.remove('listening'); document.getElementById('status').innerText = "Click to talk"; };
+    async function callOpenAI(userText) {
+        addMsg(userText, 'user');
+        let bonus = userText.toLowerCase().includes(challengeWord.toLowerCase()) ? 50 : 0;
+        if(bonus > 0) setTimeout(() => addMsg("🎯 Challenge +50 pts!", 'ai'), 500);
+        const level = document.getElementById('lvl').value;
+        const currentField = FIELDS.find(f => f.n === topic);
+        const systemPrompt = "Friendly English Tutor (FWB Belgium). Level: " + level + ". Topic: " + topic + ". Vocabulary: " + currentField.w + ". Rules: 1 sentence, correct errors, end with question.";
+        const messages = [{ role: "system", content: systemPrompt }, ...history, { role: "user", content: userText }];
+        try {
+            const r = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
+                body: JSON.stringify({ model: "gpt-4o-mini", messages: messages })
+            });
+            const d = await r.json();
+            const reply = d.choices[0].message.content;
+            addMsg(reply, 'ai');
+            const u = new SpeechSynthesisUtterance(reply); u.lang = 'en-US'; u.rate = 0.85; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
+            history.push({ role: "user", content: userText }); history.push({ role: "assistant", content: reply });
+            score += (10 + bonus); document.getElementById('score-val').innerText = score;
+        } catch (e) { addMsg("Error: Check API credits.", "ai"); }
+    }
+    function addMsg(t, cl) {
+        const box = document.getElementById('chat'); const div = document.createElement('div');
+        div.className = "msg " + cl; div.innerText = t; box.appendChild(div); box.scrollTop = box.scrollHeight;
+    }
+</script>
+</body>
+</html>
+"""
+
+# 3. Sécurisation totale : On injecte la clé puis on encode tout en Base64
+final_html = raw_html.replace("TOKEN_KEY", api_key)
+b64_html = base64.b64encode(final_html.encode()).decode()
+
+# 4. Affichage via un IFrame pour éviter que Streamlit ne lise le contenu
+st.components.v1.html(
+    f'<iframe src="data:text/html;base64,{b64_html}" style="width:100%; height:800px; border:none;"></iframe>',
+    height=800
+)
