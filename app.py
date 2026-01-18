@@ -47,13 +47,13 @@ part1 = """
         <div class="challenge-box" id="challenge-txt">Challenge: Use "NAME" (+50 pts)</div>
     </div>
     <div class="topics" id="t-grid"></div>
-    <div id="chat"><div class="msg ai">Hello! Practice your English and when you are finished, click "Get Evaluation" to see your results!</div></div>
+    <div id="chat"><div class="msg ai">Hello! Practice your English and click the button below to get your FWB evaluation in French!</div></div>
     <div class="controls">
         <div class="btn-row">
             <button id="mic">🎤</button>
-            <button id="eval-btn" class="eval-btn">📊 Get My FWB Evaluation</button>
+            <button id="eval-btn" class="eval-btn">📊 Mon Évaluation FWB</button>
         </div>
-        <p id="status" style="font-size:0.7rem; color:#666; margin:0;">Tap to talk</p>
+        <p id="status" style="font-size:0.7rem; color:#666; margin:0;">Appuie pour parler</p>
     </div>
 </div>
 <script>
@@ -108,30 +108,30 @@ part3 = """
 
     document.getElementById('mic').onclick = () => {
         initVoice();
-        if (!rec) { alert("Use Chrome/Edge."); return; }
+        if (!rec) { alert("Navigateur non compatible."); return; }
         try { rec.start(); } catch(e) {}
     };
 
     rec.onstart = () => {
         document.getElementById('mic').classList.add('listening');
-        document.getElementById('status').innerText = "Listening...";
+        document.getElementById('status').innerText = "Je t'écoute...";
     };
 
     rec.onresult = (e) => { callAI(e.results[0][0].transcript); };
     rec.onend = () => {
         document.getElementById('mic').classList.remove('listening');
-        document.getElementById('status').innerText = "Tap to talk";
+        document.getElementById('status').innerText = "Appuie pour parler";
     };
 
     async function callAI(userText) {
         addMsg(userText, 'user');
-        fullTranscript += "Student: " + userText + "\\n";
+        fullTranscript += "Élève: " + userText + "\\n";
         
         let bonus = userText.toLowerCase().includes(challengeWord.toLowerCase()) ? 50 : 0;
         const level = document.getElementById('lvl').value;
-        const goal = document.getElementById('lesson-goal').value || "General practice";
+        const goal = document.getElementById('lesson-goal').value || "Pratique générale";
         
-        const systemPrompt = "Friendly English Tutor (Belgium). Level: " + level + ". Goal: " + goal + ". Rules: 1 sentence response + 1 question.";
+        const systemPrompt = "Friendly English Tutor (Belgium). Level: " + level + ". Goal: " + goal + ". Rule: 1 sentence response + 1 question.";
         
         try {
             const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -156,7 +156,7 @@ part3 = """
             history.push({role:"user", content:userText}, {role:"assistant", content:reply});
             score += (10 + bonus);
             document.getElementById('score-val').innerText = score;
-        } catch(e) { addMsg("Error. Try again.", "ai"); }
+        } catch(e) { addMsg("Erreur. Réessaie.", "ai"); }
     }
 
     function addMsg(t, cl) {
@@ -168,19 +168,27 @@ part3 = """
         box.scrollTop = box.scrollHeight;
     }
 
-    // FONCTION D'ÉVALUATION FWB
+    // FONCTION D'ÉVALUATION EN FRANÇAIS AVEC TUTOIEMENT
     document.getElementById('eval-btn').onclick = async () => {
         if (history.length < 2) {
-            alert("Speak more before getting an evaluation!");
+            alert("Parle un peu plus avant de demander une évaluation !");
             return;
         }
         
-        addMsg("⌛ Analysing your performance according to FWB standards...", "ai");
+        addMsg("⌛ Analyse de ton travail en cours (critères FWB)...", "ai");
         
         const level = document.getElementById('lvl').value;
-        const goal = document.getElementById('lesson-goal').value;
+        const goal = document.getElementById('lesson-goal').value || "Pratique générale";
 
-        const evalPrompt = "As an English Teacher in Belgium, evaluate this conversation for a level " + level + ". Goal was: " + goal + ". Use these criteria: 1. Respect of goal/topic. 2. Vocabulary usage. 3. Grammar. 4. Interaction. Give a final grade out of 20 and a short encouraging advice in French. Transcript: " + fullTranscript;
+        const evalPrompt = "Agis comme un professeur d'anglais bienveillant en Belgique. Évalue la conversation ci-dessous pour un élève de niveau " + level + ". L'objectif était : " + goal + ". " +
+        "RÉDIGE TOUTE L'ÉVALUATION EN FRANÇAIS ET TUTOIE L'ÉLÈVE. " +
+        "Structure ton rapport ainsi : " +
+        "1. Respect de l'objectif et du sujet (Score sur 5). " +
+        "2. Richesse du vocabulaire (Score sur 5). " +
+        "3. Correction de la langue et grammaire (Score sur 5). " +
+        "4. Interaction et aisance (Score sur 5). " +
+        "Donne ensuite une NOTE GLOBALE sur 20 et termine par un CONSEIL PERSONNALISÉ encourageant. " +
+        "Voici la conversation : " + fullTranscript;
 
         try {
             const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -188,22 +196,21 @@ part3 = """
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
                 body: JSON.stringify({
                     model: "gpt-4o-mini",
-                    messages: [{role:"system", content: "You are a professional English teacher for FWB schools."}, {role:"user", content: evalPrompt}]
+                    messages: [{role:"system", content: "Tu es un professeur d'anglais expert dans le système scolaire belge (FWB)."}, {role:"user", content: evalPrompt}]
                 })
             });
             const d = await r.json();
             const evaluation = d.choices[0].message.content;
 
-            // Téléchargement du rapport
-            const blob = new Blob(["=== FWB PROGRESS REPORT ===\\n\\n" + evaluation + "\\n\\n--- Transcript ---\\n" + fullTranscript], { type: "text/plain" });
+            const blob = new Blob(["=== RAPPORT DE PROGRESSION ANGLAIS (FWB) ===\\n\\n" + evaluation], { type: "text/plain" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = "Evaluation_FWB.txt";
+            a.download = "Mon_Evaluation_Anglais.txt";
             a.click();
             
-            addMsg("✅ Evaluation downloaded! Great job.", "ai");
-        } catch(e) { alert("Evaluation failed. Check connection."); }
+            addMsg("✅ Ton évaluation est téléchargée ! Lis-la bien pour progresser.", "ai");
+        } catch(e) { alert("L'évaluation a échoué. Vérifie ta connexion."); }
     };
 </script>
 </body>
