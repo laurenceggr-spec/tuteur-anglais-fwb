@@ -1,14 +1,13 @@
 import streamlit as st
 
-# Configuration de la page
+# 1. Configuration de la page
 st.set_page_config(page_title="English Tutor FWB Pro", layout="centered")
 
-# Récupération sécurisée de la clé
+# 2. Récupération sécurisée de la clé
 api_key = st.secrets.get("OPENAI_API_KEY", "")
 
-# Utilisation d'une chaîne de caractères simple (triple quotes sans le 'f' devant)
-# On remplace manuellement la clé API plus bas pour éviter le SyntaxError
-html_template = """
+# 3. Le template HTML (Utilisation d'une Raw String r\"\"\" pour éviter les erreurs de syntaxe)
+html_template = r"""
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -20,8 +19,8 @@ html_template = """
         .app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; box-shadow: 0 0 20px rgba(0,0,0,0.1); height: 100vh; }
         header { background: var(--p); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
         .settings-bar { padding: 10px; background: #eee; border-bottom: 1px solid #ddd; display: flex; flex-direction: column; gap: 5px; }
-        select { width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ccc; }
-        .challenge-box { background: #FEF9E7; padding: 8px; border: 1px dashed var(--gold); border-radius: 5px; font-size: 0.85rem; color: #7D6608; text-align: center; }
+        select { width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px; }
+        .challenge-box { background: #FEF9E7; padding: 8px; border: 1px dashed var(--gold); border-radius: 5px; font-size: 0.85rem; color: #7D6608; text-align: center; font-weight: bold; }
         .topics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 10px; border-bottom: 2px solid #ddd; background: #fff; }
         .t-btn { font-size: 0.7rem; padding: 8px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; background: white; transition: 0.2s; text-align: center; }
         .t-btn.active { background: var(--s); color: white; border-color: var(--s); }
@@ -31,61 +30,4 @@ html_template = """
         .ai { align-self: flex-start; background: white; border: 1px solid #ddd; color: #333; border-bottom-left-radius: 2px; }
         .controls { padding: 20px; text-align: center; border-top: 1px solid #eee; background: white; }
         #mic { width: 70px; height: 70px; border-radius: 50%; border: none; background: var(--err); color: white; font-size: 1.8rem; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); outline: none; }
-        #mic.listening { background: var(--ok); animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(39,174,96, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(39,174,96, 0); } }
-    </style>
-</head>
-<body>
-<div class="app">
-    <header>
-        <div style="font-weight:bold;">English Tutor FWB 🇧🇪</div>
-        <div>⭐ <span id="score-val">0</span></div>
-    </header>
-    <div class="settings-bar">
-        <select id="lvl">
-            <option value="A1 (P3-P6)">Niveau P3-P6 (A1)</option>
-            <option value="A2.1 (S1-S2)">Niveau S1-S2 (A2.1)</option>
-            <option value="A2.2 (S3)">Niveau S3 (A2.2)</option>
-        </select>
-        <div class="challenge-box" id="challenge-txt">Challenge: Use the word "SCHOOL" for +50 pts!</div>
-    </div>
-    <div class="topics" id="t-grid"></div>
-    <div id="chat">
-        <div class="msg ai">Hello! I'm your tutor. Choose a topic and let's speak!</div>
-    </div>
-    <div class="controls">
-        <button id="mic">🎤</button>
-        <p id="status">Click to talk</p>
-    </div>
-</div>
-
-<script>
-    const API_KEY = "REPLACE_ME_WITH_KEY";
-    const FIELDS = [
-        { n: 'Identity', e: '👤', w: 'name, age, brother, sister, Belgium' }, 
-        { n: 'House', e: '🏠', w: 'bedroom, kitchen, garden, chair, table' }, 
-        { n: 'Hobbies', e: '⚽', w: 'football, music, video games, swimming' }, 
-        { n: 'Food', e: '🍕', w: 'apple, bread, breakfast, hungry, thirsty' },
-        { n: 'Shopping', e: '🛍️', w: 'buy, price, shop, money, expensive' },
-        { n: 'Health', e: '🍎', w: 'headache, doctor, fruit, vegetable, sport' },
-        { n: 'Travel', e: '🚲', w: 'bus, train, bike, holiday, hotel' },
-        { n: 'Time', e: '⏰', w: 'monday, morning, night, weekend, o-clock' }
-    ];
-
-    let topic = "Identity";
-    let challengeWord = "name";
-    let score = 0;
-    let history = [];
-
-    const grid = document.getElementById('t-grid');
-    FIELDS.forEach((f, i) => {
-        const b = document.createElement('button');
-        b.className = `t-btn ${i === 0 ? 'active' : ''}`;
-        b.innerHTML = `${f.e}<br>${f.n}`;
-        b.onclick = () => {
-            topic = f.n;
-            const words = f.w.split(', ');
-            challengeWord = words[Math.floor(Math.random() * words.length)];
-            document.getElementById('challenge-txt').innerText = `Challenge: Use the word "${challengeWord.toUpperCase()}" for +50 pts!`;
-            document.querySelectorAll('.t-btn').forEach(x => x.classList.remove('active'));
-            b.classList.
+        #mic.listening { background: var(--ok); animation:
