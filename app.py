@@ -1,9 +1,7 @@
 import streamlit as st
 
-# Configuration de la page
 st.set_page_config(page_title="English Tutor FWB", layout="centered")
 
-# On intègre votre code HTML/JS directement
 html_code = """
 <!DOCTYPE html>
 <html lang="fr">
@@ -52,7 +50,7 @@ html_code = """
     <div class="topics" id="t-grid"></div>
 
     <div id="chat">
-        <div class="msg ai">Hello! I'm your tutor. Clique sur l'engrenage pour ta clé API Gemini, puis sur le micro pour me parler !</div>
+        <div class="msg ai">Hello! I'm your tutor. Clique sur l'engrenage pour ta clé API, puis sur le micro pour me parler !</div>
     </div>
 
     <div class="controls">
@@ -71,7 +69,7 @@ html_code = """
     let key = localStorage.getItem('gemini_key') || "";
     let topic = "Identity";
     let score = 0;
-    let history = []; // Mémoire de conversation
+    let history = [];
 
     const grid = document.getElementById('t-grid');
     FIELDS.forEach((f, i) => {
@@ -83,17 +81,17 @@ html_code = """
             document.querySelectorAll('.t-btn').forEach(x => x.classList.remove('active'));
             b.classList.add('active');
             addMsg(`Topic changed to: ${f.n}. Ready!`, 'ai');
-            history = []; // Reset history on topic change
+            history = []; 
         };
         grid.appendChild(b);
     });
 
     window.askKey = function() {
-        const input = prompt("Colle ta clé API Google Gemini ici :", key);
+        const input = prompt("Colle ta clé API Gemini ici :", key);
         if (input) {
             key = input.trim();
             localStorage.setItem('gemini_key', key);
-            alert("Clé enregistrée !");
+            location.reload();
         }
     };
 
@@ -101,11 +99,10 @@ html_code = """
     if (Speech) {
         const rec = new Speech();
         rec.lang = 'en-US';
-        rec.continuous = false;
 
         document.getElementById('mic').onclick = () => {
             if (!key) return askKey();
-            try { rec.start(); } catch(e) { console.error(e); }
+            try { rec.start(); } catch(e) {}
         };
 
         rec.onstart = () => {
@@ -127,17 +124,11 @@ html_code = """
 
     async function callAI(userText) {
         const level = document.getElementById('lvl').value;
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+        // URL MISE À JOUR VERS V1
+        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${key}`;
 
-        // Construction du prompt avec historique pour la fluidité
         const context = history.map(h => `${h.role}: ${h.text}`).join("\\n");
-        const promptText = `Act as a kind English Tutor for a Belgian student (FWB context). 
-        Level: ${level}. Current Topic: ${topic}. 
-        Conversation history: ${context}
-        Student said: "${userText}". 
-        Mission: Respond in 1 short sentence (max 15 words). 
-        If there's a mistake, say "You said... but it's better to say...". 
-        Always end with a simple question.`;
+        const promptText = `Act as a friendly English Tutor (FWB Belgium context). Level: ${level}. Topic: ${topic}. History: ${context}. Student said: "${userText}". Respond in 1 short sentence, correct errors gently like 'You said... but it's better to say...', and ask 1 question. Use very simple English.`;
 
         try {
             const r = await fetch(url, {
@@ -149,20 +140,17 @@ html_code = """
 
             if (d.error) {
                 addMsg(`API Error: ${d.error.message}`, 'error-msg');
-            } else {
+            } else if (d.candidates && d.candidates[0].content) {
                 const reply = d.candidates[0].content.parts[0].text;
                 addMsg(reply, 'ai');
                 speak(reply);
-                
-                // Sauvegarde dans l'historique
                 history.push({role: "Student", text: userText});
                 history.push({role: "Tutor", text: reply});
-                
                 score += 10;
                 document.getElementById('score-val').innerText = score;
             }
         } catch (e) {
-            addMsg("Connection error. Check your Key.", "error-msg");
+            addMsg("Connection error. Try again.", "error-msg");
         }
     }
 
@@ -176,10 +164,10 @@ html_code = """
     }
 
     function speak(t) {
-        window.speechSynthesis.cancel(); // Arrête la voix précédente
+        window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(t);
         u.lang = 'en-US';
-        u.rate = 0.85; // Un peu plus lent pour les élèves
+        u.rate = 0.9;
         window.speechSynthesis.speak(u);
     }
 </script>
@@ -187,5 +175,4 @@ html_code = """
 </html>
 """
 
-# Affichage du composant
-st.components.v1.html(html_code, height=700)
+st.components.v1.html(html_code, height=750)
