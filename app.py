@@ -26,9 +26,11 @@ part1 = """
         .msg { max-width: 85%; padding: 12px; border-radius: 18px; line-height: 1.4; font-size: 1rem; word-wrap: break-word; }
         .user { align-self: flex-end; background: var(--s); color: white; border-bottom-right-radius: 2px; }
         .ai { align-self: flex-start; background: white; border: 1px solid #ddd; border-bottom-left-radius: 2px; }
-        .controls { padding: 20px; text-align: center; border-top: 1px solid #eee; background: white; padding-bottom: 40px; }
-        #mic { width: 70px; height: 70px; border-radius: 50%; border: none; background: var(--err); color: white; font-size: 1.8rem; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        .controls { padding: 15px; text-align: center; border-top: 1px solid #eee; background: white; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-bottom: 30px; }
+        .btn-row { display: flex; align-items: center; gap: 20px; }
+        #mic { width: 70px; height: 70px; border-radius: 50%; border: none; background: var(--err); color: white; font-size: 1.8rem; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         #mic.listening { background: var(--ok); animation: pulse 1.5s infinite; }
+        .dl-btn { background: #95a5a6; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 0.8rem; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(39,174,96, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(39,174,96, 0); } }
     </style>
 </head>
@@ -41,14 +43,17 @@ part1 = """
             <option value="A2.1">Niveau S1-S2 (A2.1)</option>
             <option value="A2.2">Niveau S3 (A2.2)</option>
         </select>
-        <input type="text" id="lesson-goal" class="goal-input" placeholder="Objectif (ex: le passé, les vêtements...)">
+        <input type="text" id="lesson-goal" class="goal-input" placeholder="Objectif de la leçon...">
         <div class="challenge-box" id="challenge-txt">Challenge: Use "NAME" (+50 pts)</div>
     </div>
     <div class="topics" id="t-grid"></div>
-    <div id="chat"><div class="msg ai">Hello! I'm your tutor. Tap the mic to start. (Make sure your sound is ON!)</div></div>
+    <div id="chat"><div class="msg ai">Hello! Tap the mic to start. Don't forget to download your chat at the end!</div></div>
     <div class="controls">
-        <button id="mic">🎤</button>
-        <p id="status" style="font-size:0.8rem; color:#666; margin-top:10px;">Tap to talk</p>
+        <div class="btn-row">
+            <button id="mic">🎤</button>
+            <button id="dl-chat" class="dl-btn">📥 Download Chat</button>
+        </div>
+        <p id="status" style="font-size:0.8rem; color:#666; margin:0;">Tap to talk</p>
     </div>
 </div>
 <script>
@@ -69,6 +74,7 @@ part3 = """
     ];
 
     let topic = "Identity"; let challengeWord = "name"; let score = 0; let history = [];
+    let fullTranscript = "";
     let voiceInitialized = false;
 
     const grid = document.getElementById('t-grid');
@@ -84,40 +90,31 @@ part3 = """
             document.querySelectorAll('.t-btn').forEach(x => x.classList.remove('active'));
             b.classList.add('active');
             history = [];
-            initVoice(); // Débloque le son au clic sur un thème
         };
         grid.appendChild(b);
     });
 
-    // Fonction cruciale pour Mobile : réveille le moteur audio
     function initVoice() {
         if (!voiceInitialized) {
             const silent = new SpeechSynthesisUtterance("");
             window.speechSynthesis.speak(silent);
             voiceInitialized = true;
-            console.log("Voice Engine Awakened");
         }
     }
 
     const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = (Speech) ? new Speech() : null;
-    if (rec) {
-        rec.lang = 'en-US';
-        rec.continuous = false;
-    }
+    if (rec) { rec.lang = 'en-US'; rec.continuous = false; }
 
     document.getElementById('mic').onclick = () => {
-        initVoice(); // Débloque le son au clic micro
-        if (!rec) {
-            alert("Vocal non supporté. Utilisez Chrome.");
-            return;
-        }
+        initVoice();
+        if (!rec) { alert("Use Chrome/Edge."); return; }
         try { rec.start(); } catch(e) {}
     };
 
     rec.onstart = () => {
         document.getElementById('mic').classList.add('listening');
-        document.getElementById('status').innerText = "I am listening...";
+        document.getElementById('status').innerText = "Listening...";
     };
 
     rec.onresult = (e) => { callAI(e.results[0][0].transcript); };
@@ -128,12 +125,14 @@ part3 = """
 
     async function callAI(userText) {
         addMsg(userText, 'user');
+        fullTranscript += "Me: " + userText + "\\n";
+        
         let bonus = userText.toLowerCase().includes(challengeWord.toLowerCase()) ? 50 : 0;
         const level = document.getElementById('lvl').value;
-        const goal = document.getElementById('lesson-goal').value || "General practice";
+        const goal = document.getElementById('lesson-goal').value || "General Practice";
         const currentField = FIELDS.find(f => f.n === topic);
         
-        const systemPrompt = "Friendly English Tutor (Belgium). Level: " + level + ". Goal: " + goal + ". Topic: " + topic + ". Rule: 1 sentence response + 1 question.";
+        const systemPrompt = "Friendly English Tutor (FWB). Level: " + level + ". Topic: " + topic + ". Goal: " + goal + ". Rule: 1 sentence response + 1 question.";
         
         try {
             const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -148,13 +147,11 @@ part3 = """
             const reply = d.choices[0].message.content;
             
             addMsg(reply, 'ai');
-            if (bonus > 0) addMsg("🎯 Bonus +50!", "ai");
+            fullTranscript += "Tutor: " + reply + "\\n\\n";
             
-            // Synthèse vocale
             window.speechSynthesis.cancel();
             const u = new SpeechSynthesisUtterance(reply);
             u.lang = 'en-US';
-            u.rate = 0.9;
             window.speechSynthesis.speak(u);
             
             history.push({role:"user", content:userText}, {role:"assistant", content:reply});
@@ -171,6 +168,30 @@ part3 = """
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
     }
+
+    // Fonction de téléchargement
+    document.getElementById('dl-chat').onclick = () => {
+        const goal = document.getElementById('lesson-goal').value || "None";
+        const finalScore = document.getElementById('score-val').innerText;
+        const date = new Date().toLocaleDateString();
+        
+        let content = "=== ENGLISH LESSON REPORT ===\\n";
+        content += "Date: " + date + "\\n";
+        content += "Level: " + document.getElementById('lvl').value + "\\n";
+        content += "Lesson Goal: " + goal + "\\n";
+        content += "Final Score: ⭐ " + finalScore + "\\n";
+        content += "-----------------------------\\n\\n";
+        content += fullTranscript;
+
+        const blob = new Blob([content], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "English_Conversation_" + date.replace(/\//g, "-") + ".txt";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
 </script>
 </body>
 </html>
