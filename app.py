@@ -1,7 +1,7 @@
 import streamlit as st
 
 # 1. Configuration
-st.set_page_config(page_title="English Tutor FWB", layout="centered")
+st.set_page_config(page_title="English Tutor FWB Pro", layout="centered")
 api_key = st.secrets.get("OPENAI_API_KEY", "")
 
 # 2. Construction du HTML
@@ -27,16 +27,16 @@ part1 = """
         .user { align-self: flex-end; background: var(--s); color: white; border-bottom-right-radius: 2px; }
         .ai { align-self: flex-start; background: white; border: 1px solid #ddd; border-bottom-left-radius: 2px; }
         .controls { padding: 15px; text-align: center; border-top: 1px solid #eee; background: white; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-bottom: 30px; }
-        .btn-row { display: flex; align-items: center; gap: 20px; }
-        #mic { width: 70px; height: 70px; border-radius: 50%; border: none; background: var(--err); color: white; font-size: 1.8rem; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn-row { display: flex; align-items: center; gap: 10px; }
+        #mic { width: 60px; height: 60px; border-radius: 50%; border: none; background: var(--err); color: white; font-size: 1.5rem; cursor: pointer; }
         #mic.listening { background: var(--ok); animation: pulse 1.5s infinite; }
-        .dl-btn { background: #95a5a6; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 0.8rem; }
+        .eval-btn { background: var(--p); color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(39,174,96, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(39,174,96, 0); } }
     </style>
 </head>
 <body>
 <div class="app">
-    <header><b>English Tutor FWB 🇧🇪</b> <div>⭐ <span id="score-val">0</span></div></header>
+    <header><b>English Tutor FWB Pro</b> <div>⭐ <span id="score-val">0</span></div></header>
     <div class="settings-bar">
         <select id="lvl" style="width:100%; padding:5px;">
             <option value="A1">Niveau P3-P6 (A1)</option>
@@ -47,13 +47,13 @@ part1 = """
         <div class="challenge-box" id="challenge-txt">Challenge: Use "NAME" (+50 pts)</div>
     </div>
     <div class="topics" id="t-grid"></div>
-    <div id="chat"><div class="msg ai">Hello! Tap the mic to start. Don't forget to download your chat at the end!</div></div>
+    <div id="chat"><div class="msg ai">Hello! Practice your English and when you are finished, click "Get Evaluation" to see your results!</div></div>
     <div class="controls">
         <div class="btn-row">
             <button id="mic">🎤</button>
-            <button id="dl-chat" class="dl-btn">📥 Download Chat</button>
+            <button id="eval-btn" class="eval-btn">📊 Get My FWB Evaluation</button>
         </div>
-        <p id="status" style="font-size:0.8rem; color:#666; margin:0;">Tap to talk</p>
+        <p id="status" style="font-size:0.7rem; color:#666; margin:0;">Tap to talk</p>
     </div>
 </div>
 <script>
@@ -125,14 +125,13 @@ part3 = """
 
     async function callAI(userText) {
         addMsg(userText, 'user');
-        fullTranscript += "Me: " + userText + "\\n";
+        fullTranscript += "Student: " + userText + "\\n";
         
         let bonus = userText.toLowerCase().includes(challengeWord.toLowerCase()) ? 50 : 0;
         const level = document.getElementById('lvl').value;
-        const goal = document.getElementById('lesson-goal').value || "General Practice";
-        const currentField = FIELDS.find(f => f.n === topic);
+        const goal = document.getElementById('lesson-goal').value || "General practice";
         
-        const systemPrompt = "Friendly English Tutor (FWB). Level: " + level + ". Topic: " + topic + ". Goal: " + goal + ". Rule: 1 sentence response + 1 question.";
+        const systemPrompt = "Friendly English Tutor (Belgium). Level: " + level + ". Goal: " + goal + ". Rules: 1 sentence response + 1 question.";
         
         try {
             const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -169,28 +168,42 @@ part3 = """
         box.scrollTop = box.scrollHeight;
     }
 
-    // Fonction de téléchargement
-    document.getElementById('dl-chat').onclick = () => {
-        const goal = document.getElementById('lesson-goal').value || "None";
-        const finalScore = document.getElementById('score-val').innerText;
-        const date = new Date().toLocaleDateString();
+    // FONCTION D'ÉVALUATION FWB
+    document.getElementById('eval-btn').onclick = async () => {
+        if (history.length < 2) {
+            alert("Speak more before getting an evaluation!");
+            return;
+        }
         
-        let content = "=== ENGLISH LESSON REPORT ===\\n";
-        content += "Date: " + date + "\\n";
-        content += "Level: " + document.getElementById('lvl').value + "\\n";
-        content += "Lesson Goal: " + goal + "\\n";
-        content += "Final Score: ⭐ " + finalScore + "\\n";
-        content += "-----------------------------\\n\\n";
-        content += fullTranscript;
+        addMsg("⌛ Analysing your performance according to FWB standards...", "ai");
+        
+        const level = document.getElementById('lvl').value;
+        const goal = document.getElementById('lesson-goal').value;
 
-        const blob = new Blob([content], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "English_Conversation_" + date.replace(/\//g, "-") + ".txt";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        const evalPrompt = "As an English Teacher in Belgium, evaluate this conversation for a level " + level + ". Goal was: " + goal + ". Use these criteria: 1. Respect of goal/topic. 2. Vocabulary usage. 3. Grammar. 4. Interaction. Give a final grade out of 20 and a short encouraging advice in French. Transcript: " + fullTranscript;
+
+        try {
+            const r = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
+                body: JSON.stringify({
+                    model: "gpt-4o-mini",
+                    messages: [{role:"system", content: "You are a professional English teacher for FWB schools."}, {role:"user", content: evalPrompt}]
+                })
+            });
+            const d = await r.json();
+            const evaluation = d.choices[0].message.content;
+
+            // Téléchargement du rapport
+            const blob = new Blob(["=== FWB PROGRESS REPORT ===\\n\\n" + evaluation + "\\n\\n--- Transcript ---\\n" + fullTranscript], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "Evaluation_FWB.txt";
+            a.click();
+            
+            addMsg("✅ Evaluation downloaded! Great job.", "ai");
+        } catch(e) { alert("Evaluation failed. Check connection."); }
     };
 </script>
 </body>
