@@ -76,7 +76,7 @@ elif st.session_state.role == "Professeur":
                 st.success("Paramètres mis à jour !")
 
         st.subheader("📲 QR Code Session")
-        app_url = https://https://tuteur-anglais.streamlit.app
+        app_url = "https://tuteur-anglais.streamlit.app"
         student_url = f"{app_url}/?mode=student"
         qr = qrcode.make(student_url)
         buf = BytesIO()
