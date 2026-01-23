@@ -223,10 +223,11 @@ part3 = """
         Grammaire imposée: ${TARGET_GRAMMAR}.
         
         Structure le rapport en Français (Tutoiement) :
-        1. Utilisation du lexique spécifique (/5)
-        2. Application de la grammaire cible (/5)
-        3. Aisance et interaction (/5)
-        4. Note globale /20 et CONSEIL.
+        1. Respect de la consigne (/5)
+        2. Richesse du vocabulaire et utilisation du lexique spécifique (/5)
+        3. Correction de la grammaire et application de la grammaire cible (/5)
+        4. Aisance et interaction (/5)
+        5. Note globale /20 et CONSEIL.
         
         Texte: ${fullTranscript}`;
 
