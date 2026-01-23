@@ -242,4 +242,30 @@ part3 = """
         const evalPrompt = `Tu es un prof d'anglais belge. Évalue la session de ${USER_NAME}. 
         Niveau: ${document.getElementById('lvl').value}. Objectif: ${document.getElementById('lesson-goal').value}.
         TUTOIE l'élève. Analyse le vocabulaire (${EXTRA_CONSTRAINTS}) et la grammaire (${GRAMMAR_TARGET}).
-        Structure:
+        Structure: 1. Objectif & Lexique (/5), 2. Grammaire (/5), 3. Interaction (/5), 4. Note /20 et Conseil.
+        Transcript: ${fullTranscript}`;
+
+        const r = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
+            body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [{role:"system", content: "Expert FWB. Tutoiement obligatoire."}, {role:"user", content: evalPrompt}]
+            })
+        });
+        const d = await r.json();
+        const ev = d.choices[0].message.content;
+        
+        const blob = new Blob(["=== RAPPORT FWB - " + USER_NAME + " ===\\n\\n" + ev], {type:"text/plain"});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "Evaluation_" + USER_NAME + ".txt";
+        a.click();
+        addMsg("✅ Report downloaded!", "ai");
+    }
+</script>
+</body>
+</html>
+"""
+
+st.components.v1.html(part1 + part2 + part3, height=850)
