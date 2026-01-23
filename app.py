@@ -1,10 +1,36 @@
 import streamlit as st
+import PyPDF2
+import io
 
-# 1. Configuration
-st.set_page_config(page_title="English Tutor FWB Pro", layout="centered")
+# 1. Configuration de la page
+st.set_page_config(page_title="English Tutor FWB Pro", layout="wide")
 api_key = st.secrets.get("OPENAI_API_KEY", "")
 
-# 2. Construction du HTML
+# --- BARRE LATÉRALE : RÉGLAGES PÉDAGOGIQUES ---
+with st.sidebar:
+    st.header("⚙️ Paramètres de la Leçon")
+    
+    # 1. Vocabulaire spécifique (PDF)
+    uploaded_file = st.file_uploader("Charger un lexique (PDF)", type="pdf")
+    pdf_words = ""
+    if uploaded_file:
+        reader = PyPDF2.PdfReader(uploaded_file)
+        for page in reader.pages:
+            pdf_words += page.extract_text()
+        st.success("Lexique PDF intégré !")
+
+    # 2. Vocabulaire manuel (mots séparés par des virgules)
+    target_vocab = st.text_input("Mots-clés cibles (séparés par des virgules) :", 
+                                placeholder="ex: environment, global warming, nature")
+    
+    # 3. Grammaire cible
+    target_grammar = st.text_input("Grammaire à vérifier :", 
+                                  placeholder="ex: Present Perfect, Passive Voice")
+
+# Nettoyage pour injection JS (on combine le texte du PDF et les mots manuels)
+combined_constraints = f"{target_vocab}, {pdf_words[:500]}".replace('"', '').replace('\n', ' ')
+
+# 2. Construction de l'interface
 part1 = """
 <!DOCTYPE html>
 <html>
@@ -26,6 +52,7 @@ part1 = """
         .msg { max-width: 85%; padding: 12px; border-radius: 18px; line-height: 1.4; font-size: 1rem; word-wrap: break-word; }
         .user { align-self: flex-end; background: var(--s); color: white; border-bottom-right-radius: 2px; }
         .ai { align-self: flex-start; background: white; border: 1px solid #ddd; border-bottom-left-radius: 2px; }
+        .bonus-msg { font-size: 0.8rem; color: var(--ok); font-weight: bold; margin-top: -5px; margin-bottom: 5px; align-self: flex-end; }
         .controls { padding: 15px; text-align: center; border-top: 1px solid #eee; background: white; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-bottom: 30px; }
         .btn-row { display: flex; align-items: center; gap: 10px; }
         #mic { width: 60px; height: 60px; border-radius: 50%; border: none; background: var(--err); color: white; font-size: 1.5rem; cursor: pointer; }
@@ -47,7 +74,7 @@ part1 = """
         <div class="challenge-box" id="challenge-txt">Challenge: Use "NAME" (+50 pts)</div>
     </div>
     <div class="topics" id="t-grid"></div>
-    <div id="chat"><div class="msg ai">Hello! Practice your English and click the button below to get your FWB evaluation in French!</div></div>
+    <div id="chat"><div class="msg ai">Hello! I'm ready to practice your specific goals. Speak to me!</div></div>
     <div class="controls">
         <div class="btn-row">
             <button id="mic">🎤</button>
@@ -59,7 +86,11 @@ part1 = """
 <script>
 """
 
-part2 = f'const API_KEY = "{api_key}";'
+part2 = f"""
+    const API_KEY = "{api_key}";
+    const RAW_CONSTRAINTS = "{combined_constraints}";
+    const TARGET_GRAMMAR = "{target_grammar}";
+"""
 
 part3 = """
     const FIELDS = [
@@ -77,6 +108,7 @@ part3 = """
     let fullTranscript = "";
     let voiceInitialized = false;
 
+    // Initialisation de la grille
     const grid = document.getElementById('t-grid');
     FIELDS.forEach((f, i) => {
         const b = document.createElement('button');
@@ -89,50 +121,69 @@ part3 = """
             document.getElementById('challenge-txt').innerText = "Challenge: Use \\"" + challengeWord.toUpperCase() + "\\" (+50 pts)";
             document.querySelectorAll('.t-btn').forEach(x => x.classList.remove('active'));
             b.classList.add('active');
-            history = [];
         };
         grid.appendChild(b);
     });
-
-    function initVoice() {
-        if (!voiceInitialized) {
-            const silent = new SpeechSynthesisUtterance("");
-            window.speechSynthesis.speak(silent);
-            voiceInitialized = true;
-        }
-    }
 
     const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = (Speech) ? new Speech() : null;
     if (rec) { rec.lang = 'en-US'; rec.continuous = false; }
 
     document.getElementById('mic').onclick = () => {
-        initVoice();
+        if (!voiceInitialized) { window.speechSynthesis.speak(new SpeechSynthesisUtterance("")); voiceInitialized = true; }
         if (!rec) { alert("Navigateur non compatible."); return; }
         try { rec.start(); } catch(e) {}
     };
 
-    rec.onstart = () => {
-        document.getElementById('mic').classList.add('listening');
-        document.getElementById('status').innerText = "Je t'écoute...";
-    };
+    rec.onstart = () => { document.getElementById('mic').classList.add('listening'); };
+    rec.onresult = (e) => { processUserSpeech(e.results[0][0].transcript); };
+    rec.onend = () => { document.getElementById('mic').classList.remove('listening'); };
 
-    rec.onresult = (e) => { callAI(e.results[0][0].transcript); };
-    rec.onend = () => {
-        document.getElementById('mic').classList.remove('listening');
-        document.getElementById('status').innerText = "Appuie pour parler";
-    };
+    async function processUserSpeech(userText) {
+        addMsg(userText, 'user');
+        
+        // --- LOGIQUE DE SCORING DYNAMIQUE ---
+        let currentBonus = 0;
+        let foundWords = [];
+        
+        // 1. Check Challenge Word
+        if (userText.toLowerCase().includes(challengeWord.toLowerCase())) {
+            currentBonus += 50;
+            foundWords.push("CHALLENGE ✨");
+        }
+
+        // 2. Check Pedagogical Vocabulary
+        const vocabList = RAW_CONSTRAINTS.split(',').map(s => s.trim().toLowerCase()).filter(s => s.length > 3);
+        vocabList.forEach(w => {
+            if (userText.toLowerCase().includes(w) && !foundWords.includes(w)) {
+                currentBonus += 30;
+                foundWords.push(w);
+            }
+        });
+
+        if (currentBonus > 0) {
+            score += currentBonus;
+            document.getElementById('score-val').innerText = score;
+            const bDiv = document.createElement('div');
+            bDiv.className = "bonus-msg";
+            bDiv.innerText = "Bonus: +" + currentBonus + " pts (" + foundWords.join(', ') + ")";
+            document.getElementById('chat').appendChild(bDiv);
+        }
+
+        callAI(userText);
+    }
 
     async function callAI(userText) {
-        addMsg(userText, 'user');
         fullTranscript += "Élève: " + userText + "\\n";
-        
-        let bonus = userText.toLowerCase().includes(challengeWord.toLowerCase()) ? 50 : 0;
         const level = document.getElementById('lvl').value;
-        const goal = document.getElementById('lesson-goal').value || "Pratique générale";
+        const goal = document.getElementById('lesson-goal').value || "General practice";
         
-        const systemPrompt = "Friendly English Tutor (Belgium). Level: " + level + ". Goal: " + goal + ". Rule: 1 sentence response + 1 question.";
-        
+        const systemPrompt = `You are a friendly English Tutor in Belgium. 
+        Level: ${level}. Goal: ${goal}. 
+        Specific Vocab to encourage: ${RAW_CONSTRAINTS}.
+        Grammar to encourage: ${TARGET_GRAMMAR}.
+        Rule: 1 sentence response + 1 question. Be supportive.`;
+
         try {
             const r = await fetch('https://api.openai.com/v1/chat/completions', {
                 method: 'POST',
@@ -144,19 +195,13 @@ part3 = """
             });
             const d = await r.json();
             const reply = d.choices[0].message.content;
-            
             addMsg(reply, 'ai');
             fullTranscript += "Tutor: " + reply + "\\n\\n";
             
-            window.speechSynthesis.cancel();
-            const u = new SpeechSynthesisUtterance(reply);
-            u.lang = 'en-US';
+            const u = new SpeechSynthesisUtterance(reply); u.lang = 'en-US';
             window.speechSynthesis.speak(u);
-            
             history.push({role:"user", content:userText}, {role:"assistant", content:reply});
-            score += (10 + bonus);
-            document.getElementById('score-val').innerText = score;
-        } catch(e) { addMsg("Erreur. Réessaie.", "ai"); }
+        } catch(e) { addMsg("Error connecting to AI.", "ai"); }
     }
 
     function addMsg(t, cl) {
@@ -168,27 +213,22 @@ part3 = """
         box.scrollTop = box.scrollHeight;
     }
 
-    // FONCTION D'ÉVALUATION EN FRANÇAIS AVEC TUTOIEMENT
     document.getElementById('eval-btn').onclick = async () => {
-        if (history.length < 2) {
-            alert("Parle un peu plus avant de demander une évaluation !");
-            return;
-        }
+        if (history.length < 2) { alert("Speak a bit more first!"); return; }
+        addMsg("⌛ Analyse criteria (FWB)...", "ai");
         
-        addMsg("⌛ Analyse de ton travail en cours (critères FWB)...", "ai");
+        const evalPrompt = `Évalue l'élève (Niveau ${document.getElementById('lvl').value}).
+        Objectif: ${document.getElementById('lesson-goal').value}.
+        Vocabulaire imposé: ${RAW_CONSTRAINTS}.
+        Grammaire imposée: ${TARGET_GRAMMAR}.
         
-        const level = document.getElementById('lvl').value;
-        const goal = document.getElementById('lesson-goal').value || "Pratique générale";
-
-        const evalPrompt = "Agis comme un professeur d'anglais bienveillant en Belgique. Évalue la conversation ci-dessous pour un élève de niveau " + level + ". L'objectif était : " + goal + ". " +
-        "RÉDIGE TOUTE L'ÉVALUATION EN FRANÇAIS ET TUTOIE L'ÉLÈVE. " +
-        "Structure ton rapport ainsi : " +
-        "1. Respect de l'objectif et du sujet (Score sur 5). " +
-        "2. Richesse du vocabulaire (Score sur 5). " +
-        "3. Correction de la langue et grammaire (Score sur 5). " +
-        "4. Interaction et aisance (Score sur 5). " +
-        "Donne ensuite une NOTE GLOBALE sur 20 et termine par un CONSEIL PERSONNALISÉ encourageant. " +
-        "Voici la conversation : " + fullTranscript;
+        Structure le rapport en Français (Tutoiement) :
+        1. Utilisation du lexique spécifique (/5)
+        2. Application de la grammaire cible (/5)
+        3. Aisance et interaction (/5)
+        4. Note globale /20 et CONSEIL.
+        
+        Texte: ${fullTranscript}`;
 
         try {
             const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -196,21 +236,17 @@ part3 = """
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
                 body: JSON.stringify({
                     model: "gpt-4o-mini",
-                    messages: [{role:"system", content: "Tu es un professeur d'anglais expert dans le système scolaire belge (FWB)."}, {role:"user", content: evalPrompt}]
+                    messages: [{role:"system", content: "Expert enseignant FWB."}, {role:"user", content: evalPrompt}]
                 })
             });
             const d = await r.json();
-            const evaluation = d.choices[0].message.content;
-
-            const blob = new Blob(["=== RAPPORT DE PROGRESSION ANGLAIS (FWB) ===\\n\\n" + evaluation], { type: "text/plain" });
+            const evalText = d.choices[0].message.content;
+            alert(evalText);
+            const blob = new Blob([evalText], { type: "text/plain" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
-            a.href = url;
-            a.download = "Mon_Evaluation_Anglais.txt";
-            a.click();
-            
-            addMsg("✅ Ton évaluation est téléchargée ! Lis-la bien pour progresser.", "ai");
-        } catch(e) { alert("L'évaluation a échoué. Vérifie ta connexion."); }
+            a.href = url; a.download = "Evaluation.txt"; a.click();
+        } catch(e) { alert("Evaluation error."); }
     };
 </script>
 </body>
