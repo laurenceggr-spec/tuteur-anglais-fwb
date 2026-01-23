@@ -3,3 +3,4 @@ openai
 gTTS
 PyPDF2
 pandas
+qrcode[pil]
