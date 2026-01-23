@@ -13,7 +13,7 @@ with st.sidebar:
     
     st.header("⚙️ Paramètres")
     conv_mode = st.radio("Mode :", ["Tuteur IA (Interactif)", "Monologue", "Dialogue élèves"])
-    timer_mins = st.slider("Chrono (min) :", 1, 15, 5)
+    timer_mins = st.slider("Chrono (min) :", 1, 5, 3)
     voice_speed = st.slider("Vitesse voix :", 0.5, 1.2, 0.8)
 
     st.subheader("📚 Lexique & PDF")
