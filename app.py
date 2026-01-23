@@ -1,133 +1,220 @@
 import streamlit as st
-import tempfile
-import os
 
-# --- VÉRIFICATION DES LIBRAIRIES ---
-try:
-    from openai import OpenAI
-    from gtts import gTTS
-except ImportError:
-    st.error("⚠️ Il manque les librairies 'openai' et 'gTTS'.")
-    st.stop()
+# 1. Configuration
+st.set_page_config(page_title="English Tutor FWB Pro", layout="centered")
+api_key = st.secrets.get("OPENAI_API_KEY", "")
 
-# --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="English Buddy AI", page_icon="🇬🇧")
+# 2. Construction du HTML
+part1 = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        :root { --p: #2C3E50; --s: #3498DB; --bg: #F4F7F6; --err: #E74C3C; --ok: #27AE60; --gold: #F1C40F; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 0; overflow: hidden; height: 100vh; }
+        .app { width: 100%; max-width: 500px; margin: auto; background: white; height: 100vh; display: flex; flex-direction: column; }
+        header { background: var(--p); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .settings-bar { padding: 10px; background: #eee; border-bottom: 1px solid #ddd; }
+        .goal-input { width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #3498DB; margin-top: 5px; font-size: 0.85rem; box-sizing: border-box; }
+        .challenge-box { background: #FEF9E7; padding: 8px; border: 1px dashed var(--gold); border-radius: 5px; font-size: 0.85rem; color: #7D6608; text-align: center; font-weight: bold; margin-top: 5px; }
+        .topics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 10px; border-bottom: 2px solid #ddd; }
+        .t-btn { font-size: 0.7rem; padding: 8px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; background: white; text-align: center; }
+        .t-btn.active { background: var(--s); color: white; border-color: var(--s); }
+        #chat { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #fafafa; }
+        .msg { max-width: 85%; padding: 12px; border-radius: 18px; line-height: 1.4; font-size: 1rem; word-wrap: break-word; }
+        .user { align-self: flex-end; background: var(--s); color: white; border-bottom-right-radius: 2px; }
+        .ai { align-self: flex-start; background: white; border: 1px solid #ddd; border-bottom-left-radius: 2px; }
+        .controls { padding: 15px; text-align: center; border-top: 1px solid #eee; background: white; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-bottom: 30px; }
+        .btn-row { display: flex; align-items: center; gap: 10px; }
+        #mic { width: 60px; height: 60px; border-radius: 50%; border: none; background: var(--err); color: white; font-size: 1.5rem; cursor: pointer; }
+        #mic.listening { background: var(--ok); animation: pulse 1.5s infinite; }
+        .eval-btn { background: var(--p); color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(39,174,96, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(39,174,96, 0); } }
+    </style>
+</head>
+<body>
+<div class="app">
+    <header><b>English Tutor FWB Pro</b> <div>⭐ <span id="score-val">0</span></div></header>
+    <div class="settings-bar">
+        <select id="lvl" style="width:100%; padding:5px;">
+            <option value="A1">Niveau P3-P6 (A1)</option>
+            <option value="A2.1">Niveau S1-S2 (A2.1)</option>
+            <option value="A2.2">Niveau S3 (A2.2)</option>
+        </select>
+        <input type="text" id="lesson-goal" class="goal-input" placeholder="Objectif de la leçon...">
+        <div class="challenge-box" id="challenge-txt">Challenge: Use "NAME" (+50 pts)</div>
+    </div>
+    <div class="topics" id="t-grid"></div>
+    <div id="chat"><div class="msg ai">Hello! Practice your English and click the button below to get your FWB evaluation in French!</div></div>
+    <div class="controls">
+        <div class="btn-row">
+            <button id="mic">🎤</button>
+            <button id="eval-btn" class="eval-btn">📊 Mon Évaluation FWB</button>
+        </div>
+        <p id="status" style="font-size:0.7rem; color:#666; margin:0;">Appuie pour parler</p>
+    </div>
+</div>
+<script>
+"""
 
-st.title("🇬🇧 English Buddy")
-st.caption("Ton prof d'anglais propulsé par OpenAI 🧠")
+part2 = f'const API_KEY = "{api_key}";'
 
-# --- BARRE LATÉRALE (RÉGLAGES & DÉFIS) ---
-with st.sidebar:
-    st.header("⚙️ Réglages")
-    api_key = st.text_input("Clé API OpenAI (sk-...)", type="password", help="Colle ta clé ici")
-    
-    st.divider()
-    
-    st.header("🎯 Défis du Prof")
-    st.info("Configurez les contraintes pour l'élève.")
-    
-    target_vocab = st.text_input("Mots imposés", placeholder="ex: yesterday, happy")
-    grammar_focus = st.selectbox("Focus Grammaire", 
-                                 ["Aucun", "Passé (Past Simple)", "Futur (Will)", "Présent Continu (-ing)", "Questions"])
-    
-    if st.button("🗑️ Effacer l'historique"):
-        st.session_state.messages = [
-            {"role": "assistant", "content": "Hello! I am your English Buddy. Ready for the challenge?"}
-        ]
-        st.rerun()
+part3 = """
+    const FIELDS = [
+        { n: 'Identity', e: '👤', w: 'name, age, brother, sister, Belgium' }, 
+        { n: 'House', e: '🏠', w: 'bedroom, kitchen, garden, chair, table' }, 
+        { n: 'Hobbies', e: '⚽', w: 'football, music, video games, swimming' }, 
+        { n: 'Food', e: '🍕', w: 'apple, bread, breakfast, hungry, thirsty' },
+        { n: 'Shopping', e: '🛍️', w: 'buy, price, shop, money, expensive' },
+        { n: 'Health', e: '🍎', w: 'headache, doctor, fruit, vegetable, sport' },
+        { n: 'Travel', e: '🚲', w: 'bus, train, bike, holiday, hotel' },
+        { n: 'Time', e: '⏰', w: 'monday, morning, night, weekend, o-clock' }
+    ];
 
-# --- INITIALISATION CLIENT OPENAI ---
-client = None
-if api_key:
-    try:
-        client = OpenAI(api_key=api_key)
-    except Exception as e:
-        st.error(f"Erreur de clé : {e}")
+    let topic = "Identity"; let challengeWord = "name"; let score = 0; let history = [];
+    let fullTranscript = "";
+    let voiceInitialized = false;
 
-# --- HISTORIQUE DE CONVERSATION ---
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! I am your English Buddy. Ready for the challenge?"}
-    ]
+    const grid = document.getElementById('t-grid');
+    FIELDS.forEach((f, i) => {
+        const b = document.createElement('button');
+        b.className = "t-btn " + (i === 0 ? "active" : "");
+        b.innerHTML = f.e + "<br>" + f.n;
+        b.onclick = () => {
+            topic = f.n;
+            const words = f.w.split(', ');
+            challengeWord = words[Math.floor(Math.random() * words.length)];
+            document.getElementById('challenge-txt').innerText = "Challenge: Use \\"" + challengeWord.toUpperCase() + "\\" (+50 pts)";
+            document.querySelectorAll('.t-btn').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+            history = [];
+        };
+        grid.appendChild(b);
+    });
 
-# --- AFFICHAGE DES MESSAGES ---
-for msg in st.session_state.messages:
-    role_display = "user" if msg["role"] == "user" else "assistant"
-    avatar = "🧑‍🎓" if role_display == "user" else "🤖"
-    
-    with st.chat_message(role_display, avatar=avatar):
-        st.write(msg["content"])
-        if "audio" in msg:
-            st.audio(msg["audio"], format="audio/mp3")
+    function initVoice() {
+        if (!voiceInitialized) {
+            const silent = new SpeechSynthesisUtterance("");
+            window.speechSynthesis.speak(silent);
+            voiceInitialized = true;
+        }
+    }
 
-# --- ZONE DE SAISIE ET TRAITEMENT ---
-user_input = st.chat_input("Réponds en anglais ici...")
+    const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = (Speech) ? new Speech() : null;
+    if (rec) { rec.lang = 'en-US'; rec.continuous = false; }
 
-if user_input:
-    # 1. Afficher le message utilisateur
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user", avatar="🧑‍🎓"):
-        st.write(user_input)
+    document.getElementById('mic').onclick = () => {
+        initVoice();
+        if (!rec) { alert("Navigateur non compatible."); return; }
+        try { rec.start(); } catch(e) {}
+    };
 
-    # 2. Préparer la réponse
-    response_text = ""
-    audio_path = None
+    rec.onstart = () => {
+        document.getElementById('mic').classList.add('listening');
+        document.getElementById('status').innerText = "Je t'écoute...";
+    };
 
-    if not client:
-        response_text = "Please enter your OpenAI API Key in the sidebar first! 🔑"
-    else:
-        try:
-            # Construction du Prompt avec les contraintes (Le "Cerveau")
-            constraint_text = ""
-            if target_vocab:
-                constraint_text += f"The student MUST try to use these words: [{target_vocab}]. Check if they used them. "
-            if grammar_focus != "Aucun":
-                constraint_text += f"The student SHOULD practice this grammar: [{grammar_focus}]. "
+    rec.onresult = (e) => { callAI(e.results[0][0].transcript); };
+    rec.onend = () => {
+        document.getElementById('mic').classList.remove('listening');
+        document.getElementById('status').innerText = "Appuie pour parler";
+    };
 
-            system_prompt = f"""
-            Act as a supportive English tutor for a child.
-            TEACHER MISSION (Constraints): {constraint_text}
+    async function callAI(userText) {
+        addMsg(userText, 'user');
+        fullTranscript += "Élève: " + userText + "\\n";
+        
+        let bonus = userText.toLowerCase().includes(challengeWord.toLowerCase()) ? 50 : 0;
+        const level = document.getElementById('lvl').value;
+        const goal = document.getElementById('lesson-goal').value || "Pratique générale";
+        
+        const systemPrompt = "Friendly English Tutor (Belgium). Level: " + level + ". Goal: " + goal + ". Rule: 1 sentence response + 1 question.";
+        
+        try {
+            const r = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
+                body: JSON.stringify({
+                    model: "gpt-4o-mini",
+                    messages: [{role:"system", content:systemPrompt}, ...history, {role:"user", content:userText}]
+                })
+            });
+            const d = await r.json();
+            const reply = d.choices[0].message.content;
             
-            Instructions:
-            1. Reply in simple English (A1/A2 level).
-            2. Keep it short (max 25 words).
-            3. ALWAYS ask a follow-up question.
-            4. If constraints are set:
-               - If student used the required words/grammar, PRAISE them explicitly (e.g. "Great use of 'yesterday'!").
-               - If student missed them, gently nudge them.
-            5. Correct huge mistakes gently.
-            """
+            addMsg(reply, 'ai');
+            fullTranscript += "Tutor: " + reply + "\\n\\n";
+            
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(reply);
+            u.lang = 'en-US';
+            window.speechSynthesis.speak(u);
+            
+            history.push({role:"user", content:userText}, {role:"assistant", content:reply});
+            score += (10 + bonus);
+            document.getElementById('score-val').innerText = score;
+        } catch(e) { addMsg("Erreur. Réessaie.", "ai"); }
+    }
 
-            # Appel à l'IA
-            response = client.chat.completions.create(
-                model="gpt-4o-mini", # Ou gpt-3.5-turbo
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    # On envoie les 4 derniers messages pour garder le contexte sans trop dépenser
-                    *[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages[-4:]],
-                    {"role": "user", "content": user_input}
-                ],
-                temperature=0.7
-            )
-            response_text = response.choices[0].message.content
+    function addMsg(t, cl) {
+        const box = document.getElementById('chat');
+        const div = document.createElement('div');
+        div.className = "msg " + cl;
+        div.innerText = t;
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
 
-            # Génération Audio (TTS)
-            tts = gTTS(text=response_text, lang='en')
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
-                tts.save(fp.name)
-                audio_path = fp.name
+    // FONCTION D'ÉVALUATION EN FRANÇAIS AVEC TUTOIEMENT
+    document.getElementById('eval-btn').onclick = async () => {
+        if (history.length < 2) {
+            alert("Parle un peu plus avant de demander une évaluation !");
+            return;
+        }
+        
+        addMsg("⌛ Analyse de ton travail en cours (critères FWB)...", "ai");
+        
+        const level = document.getElementById('lvl').value;
+        const goal = document.getElementById('lesson-goal').value || "Pratique générale";
 
-        except Exception as e:
-            response_text = f"Sorry, error connecting to OpenAI: {e}"
+        const evalPrompt = "Agis comme un professeur d'anglais bienveillant en Belgique. Évalue la conversation ci-dessous pour un élève de niveau " + level + ". L'objectif était : " + goal + ". " +
+        "RÉDIGE TOUTE L'ÉVALUATION EN FRANÇAIS ET TUTOIE L'ÉLÈVE. " +
+        "Structure ton rapport ainsi : " +
+        "1. Respect de l'objectif et du sujet (Score sur 5). " +
+        "2. Richesse du vocabulaire (Score sur 5). " +
+        "3. Correction de la langue et grammaire (Score sur 5). " +
+        "4. Interaction et aisance (Score sur 5). " +
+        "Donne ensuite une NOTE GLOBALE sur 20 et termine par un CONSEIL PERSONNALISÉ encourageant. " +
+        "Voici la conversation : " + fullTranscript;
 
-    # 3. Afficher la réponse de l'IA
-    with st.chat_message("assistant", avatar="🤖"):
-        st.write(response_text)
-        if audio_path:
-            st.audio(audio_path, format="audio/mp3")
+        try {
+            const r = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
+                body: JSON.stringify({
+                    model: "gpt-4o-mini",
+                    messages: [{role:"system", content: "Tu es un professeur d'anglais expert dans le système scolaire belge (FWB)."}, {role:"user", content: evalPrompt}]
+                })
+            });
+            const d = await r.json();
+            const evaluation = d.choices[0].message.content;
 
-    # 4. Sauvegarder
-    msg_data = {"role": "assistant", "content": response_text}
-    if audio_path:
-        msg_data["audio"] = audio_path
-    st.session_state.messages.append(msg_data)
+            const blob = new Blob(["=== RAPPORT DE PROGRESSION ANGLAIS (FWB) ===\\n\\n" + evaluation], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "Mon_Evaluation_Anglais.txt";
+            a.click();
+            
+            addMsg("✅ Ton évaluation est téléchargée ! Lis-la bien pour progresser.", "ai");
+        } catch(e) { alert("L'évaluation a échoué. Vérifie ta connexion."); }
+    };
+</script>
+</body>
+</html>
+"""
+
+st.components.v1.html(part1 + part2 + part3, height=800)
