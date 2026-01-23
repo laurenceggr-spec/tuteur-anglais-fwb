@@ -13,7 +13,7 @@ with st.sidebar:
     
     st.header("⚙️ Paramètres")
     conv_mode = st.radio("Mode :", ["Tuteur IA (Interactif)", "Monologue", "Dialogue élèves"])
-    timer_mins = st.slider("Chrono (min) :", 1, 5, 3)
+    timer_mins = st.slider("Chrono (min) :", 1, 15, 5)
     voice_speed = st.slider("Vitesse voix :", 0.5, 1.2, 0.8)
 
     st.subheader("📚 Lexique & PDF")
@@ -23,11 +23,11 @@ with st.sidebar:
         reader = PyPDF2.PdfReader(uploaded_file)
         pdf_words = " ".join([p.extract_text() for p in reader.pages])
             
-    target_vocab = st.text_input("Mots cibles :", placeholder="word1, word2...")
+    target_vocab = st.text_input("Mots cibles additionnels :", placeholder="word1, word2...")
     target_grammar = st.text_input("Grammaire :", placeholder="ex: Past Simple")
 
-# Nettoyage des mots pour la checklist (on garde les mots de plus de 3 lettres)
-vocab_list = list(set([w.strip().lower() for w in (target_vocab + "," + pdf_words[:300]).split(",") if len(w.strip()) > 3]))
+# Préparation du vocabulaire cible (Checklist)
+vocab_list = list(set([w.strip().lower() for w in (target_vocab + "," + pdf_words[:500]).split(",") if len(w.strip()) > 3]))
 vocab_json = str(vocab_list).replace("'", '"')
 
 part1 = """
@@ -39,30 +39,37 @@ part1 = """
     <style>
         :root { --p: #2C3E50; --s: #3498DB; --bg: #F4F7F6; --err: #E74C3C; --ok: #27AE60; --gold: #F1C40F; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 0; height: 100vh; overflow:hidden; }
-        .app { width: 100%; max-width: 700px; margin: auto; background: white; height: 100vh; display: flex; flex-direction: column; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+        .app { width: 100%; max-width: 700px; margin: auto; background: white; height: 100vh; display: flex; flex-direction: column; }
         
         header { background: var(--p); color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; }
+        
         .settings-bar { padding: 10px; background: #eee; border-bottom: 1px solid #ddd; }
+        .lvl-select { width: 100%; padding: 5px; border-radius: 5px; margin-bottom: 5px; }
         
-        /* Checklist des mots */
-        .vocab-check { padding: 10px; background: #fefefe; border-bottom: 1px solid #ddd; display: flex; flex-wrap: wrap; gap: 5px; max-height: 80px; overflow-y: auto; }
-        .v-badge { padding: 4px 8px; border-radius: 12px; background: #ddd; color: #666; font-size: 0.75rem; transition: 0.3s; }
-        .v-badge.found { background: var(--ok); color: white; transform: scale(1.1); }
+        /* Bandeau Challenge */
+        .challenge-box { background: #FEF9E7; padding: 8px; border: 1px dashed var(--gold); border-radius: 5px; font-size: 0.8rem; color: #7D6608; text-align: center; font-weight: bold; margin-bottom: 5px; }
 
+        /* Grille des Thèmes */
         .topics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 8px; background: #fff; border-bottom: 1px solid #ddd; }
-        .t-btn { font-size: 0.65rem; padding: 6px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; background: white; }
-        .t-btn.active { background: var(--s); color: white; }
-        
+        .t-btn { font-size: 0.65rem; padding: 6px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; background: white; text-align: center; }
+        .t-btn.active { background: var(--s); color: white; border-color: var(--s); }
+
+        /* Checklist des mots du PDF/Manuel */
+        .vocab-check { padding: 8px; background: #f9f9f9; display: flex; flex-wrap: wrap; gap: 5px; max-height: 70px; overflow-y: auto; border-bottom: 1px solid #ddd; }
+        .v-badge { padding: 3px 8px; border-radius: 10px; background: #ddd; color: #777; font-size: 0.7rem; transition: 0.3s; border: 1px solid #ccc; }
+        .v-badge.found { background: var(--ok); color: white; border-color: var(--ok); transform: scale(1.05); }
+
         #chat { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #fafafa; }
-        .msg { max-width: 80%; padding: 10px 15px; border-radius: 15px; font-size: 0.95rem; position: relative; }
-        .user { align-self: flex-end; background: var(--s); color: white; }
-        .ai { align-self: flex-start; background: white; border: 1px solid #ddd; }
+        .msg { max-width: 80%; padding: 10px 15px; border-radius: 15px; font-size: 0.95rem; }
+        .user { align-self: flex-end; background: var(--s); color: white; border-bottom-right-radius: 2px; }
+        .ai { align-self: flex-start; background: white; border: 1px solid #ddd; border-bottom-left-radius: 2px; }
         
-        .controls { padding: 15px; text-align: center; background: white; border-top: 1px solid #eee; display: flex; align-items: center; justify-content: space-around; }
+        .controls { padding: 15px; text-align: center; background: white; border-top: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; padding-bottom: 30px; }
         #mic { width: 60px; height: 60px; border-radius: 50%; border: none; background: var(--err); color: white; font-size: 1.5rem; cursor: pointer; }
         #mic.listening { background: var(--ok); animation: pulse 1.5s infinite; }
-        .hint-btn { background: var(--gold); border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        
+        .hint-btn { background: var(--gold); border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 0.8rem; }
+        #score-val { font-weight: bold; color: var(--p); font-size: 1.1rem; }
+
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(39,174,96, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(39,174,96, 0); } }
     </style>
 </head>
@@ -71,22 +78,23 @@ part1 = """
     <header><b>English Lab FWB</b> <div id="timer-display">--:--</div></header>
     
     <div class="settings-bar">
-        <select id="lvl" style="width:100%; padding:5px; border-radius:5px;">
-            <option value="A1">Primary (P3-P6)</option>
-            <option value="A2.1">Lower Secondary (S1-S2)</option>
-            <option value="A2.2">Upper Secondary (S3)</option>
+        <select id="lvl" class="lvl-select">
+            <option value="A1">Niveau Primaire (P3-P6)</option>
+            <option value="A2.1">Niveau S1-S2 (A2.1)</option>
+            <option value="A2.2">Niveau S3 (A2.2)</option>
         </select>
-        <div class="vocab-check" id="vocab-display"></div>
+        <div class="challenge-box" id="challenge-txt">Challenge: Use "HELLO" (+50 pts)</div>
     </div>
 
     <div class="topics" id="t-grid"></div>
+    <div class="vocab-check" id="vocab-display"></div>
 
-    <div id="chat"><div class="msg ai">Hello! I am your <b>target persona</b>. Ready to practice?</div></div>
+    <div id="chat"><div class="msg ai">Hello <b><span id="name-span"></span></b>! Pick a topic, look at the vocabulary targets, and let's talk!</div></div>
     
     <div class="controls">
         <button class="hint-btn" id="hint-btn">💡 Hint</button>
         <button id="mic">🎤</button>
-        <div id="score-box" style="text-align:right">⭐ <b id="score-val">0</b></div>
+        <div style="text-align:right">⭐ <span id="score-val">0</span></div>
     </div>
 </div>
 <script>
@@ -106,9 +114,39 @@ part2 = f"""
 part3 = """
     let score = 0; let history = []; let fullTranscript = ""; 
     let timeLeft = LIMIT_TIME; let timerActive = false;
-    let foundVocab = new Set(); let fillerCount = 0;
+    let foundVocab = new Set(); let challengeWord = "hello";
 
-    // --- INITIALISATION VOCAB ---
+    document.getElementById('name-span').innerText = USER_NAME;
+
+    // --- GRILLE DES THEMES ---
+    const FIELDS = [
+        { n: 'Identity', e: '👤', w: 'name, age, brother, belgium' }, 
+        { n: 'House', e: '🏠', w: 'bedroom, kitchen, garden, chair' }, 
+        { n: 'Hobbies', e: '⚽', w: 'football, music, games, swimming' }, 
+        { n: 'Food', e: '🍕', w: 'apple, bread, breakfast, hungry' },
+        { n: 'Shopping', e: '🛍️', w: 'buy, price, shop, money' },
+        { n: 'Health', e: '🍎', w: 'headache, doctor, fruit, sport' },
+        { n: 'Travel', e: '🚲', w: 'bus, train, holiday, hotel' },
+        { n: 'Time', e: '⏰', w: 'monday, morning, night, weekend' }
+    ];
+
+    const grid = document.getElementById('t-grid');
+    FIELDS.forEach((f, i) => {
+        const b = document.createElement('button');
+        b.className = "t-btn " + (i === 0 ? "active" : "");
+        b.innerHTML = f.e + "<br>" + f.n;
+        b.onclick = () => {
+            const words = f.w.split(', ');
+            challengeWord = words[Math.floor(Math.random() * words.length)];
+            document.getElementById('challenge-txt').innerText = "Challenge: Use \\"" + challengeWord.toUpperCase() + "\\" (+50 pts)";
+            document.querySelectorAll('.t-btn').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+            addMsg("Topic changed to " + f.n, "ai");
+        };
+        grid.appendChild(b);
+    });
+
+    // --- CHECKLIST VOCAB ---
     const vDisplay = document.getElementById('vocab-display');
     VOCAB_TARGETS.forEach(w => {
         const s = document.createElement('span');
@@ -116,19 +154,7 @@ part3 = """
         vDisplay.appendChild(s);
     });
 
-    const FIELDS = [
-        { n: 'Identity', e: '👤', w: 'name, age, family' }, { n: 'House', e: '🏠', w: 'room, bed, kitchen' }, 
-        { n: 'Food', e: '🍕', w: 'eat, water, pizza' }, { n: 'Travel', e: '🚲', w: 'car, bus, plane' }
-    ];
-
-    const grid = document.getElementById('t-grid');
-    FIELDS.forEach(f => {
-        const b = document.createElement('button'); b.className = "t-btn"; b.innerHTML = f.e + "<br>" + f.n;
-        b.onclick = () => { history = []; addMsg("Topic changed to: " + f.n, "ai"); };
-        grid.appendChild(b);
-    });
-
-    // --- LOGIQUE MICRO ---
+    // --- MICRO ---
     const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new Speech(); rec.lang = 'en-US';
 
@@ -140,7 +166,7 @@ part3 = """
     rec.onstart = () => document.getElementById('mic').classList.add('listening');
     rec.onend = () => {
         document.getElementById('mic').classList.remove('listening');
-        if (timerActive && MODE !== "Tuteur IA (Interactif)") setTimeout(() => rec.start(), 600);
+        if (timerActive && MODE !== "Tuteur IA (Interactif)") setTimeout(() => { try{rec.start();}catch(e){} }, 600);
     };
 
     rec.onresult = (e) => {
@@ -152,47 +178,50 @@ part3 = """
         addMsg(text, 'user');
         fullTranscript += USER_NAME + ": " + text + "\\n";
         
-        // Détection vocabulaire
+        let bonus = 0;
+        // Check Challenge
+        if (text.toLowerCase().includes(challengeWord.toLowerCase())) bonus += 50;
+
+        // Check Checklist
         VOCAB_TARGETS.forEach(w => {
             if (text.toLowerCase().includes(w) && !foundVocab.has(w)) {
                 foundVocab.add(w);
                 document.getElementById('v-' + w).classList.add('found');
-                score += 50;
+                bonus += 30;
             }
         });
 
-        // Détection fillers (simplifiée)
-        if (text.toLowerCase().includes("euh") || text.toLowerCase().includes("mmm")) fillerCount++;
-
-        score += 10;
+        score += (10 + bonus);
         document.getElementById('score-val').innerText = score;
         if (MODE === "Tuteur IA (Interactif)") callAI(text);
     }
 
     async function callAI(text) {
-        const prompt = `Role: ${PERSONA}. Context: English Lesson. Level: ${document.getElementById('lvl').value}. 
+        const prompt = `Role: ${PERSONA}. Level: ${document.getElementById('lvl').value}. 
         Grammar Target: ${GRAMMAR_TARGET}. Rule: 1 sentence + 1 question. Student: ${USER_NAME}.`;
         
-        const r = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
-            body: JSON.stringify({
-                model: "gpt-4o-mini",
-                messages: [{role:"system", content: prompt}, ...history, {role:"user", content: text}]
-            })
-        });
-        const d = await r.json();
-        const reply = d.choices[0].message.content;
-        addMsg(reply, 'ai');
-        fullTranscript += PERSONA + ": " + reply + "\\n\\n";
-        
-        const u = new SpeechSynthesisUtterance(reply); u.lang = 'en-US'; u.rate = VOICE_SPEED;
-        window.speechSynthesis.speak(u);
-        history.push({role:"user", content:text}, {role:"assistant", content:reply});
+        try {
+            const r = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
+                body: JSON.stringify({
+                    model: "gpt-4o-mini",
+                    messages: [{role:"system", content: prompt}, ...history, {role:"user", content: text}]
+                })
+            });
+            const d = await r.json();
+            const reply = d.choices[0].message.content;
+            addMsg(reply, 'ai');
+            fullTranscript += PERSONA + ": " + reply + "\\n\\n";
+            
+            const u = new SpeechSynthesisUtterance(reply); u.lang = 'en-US'; u.rate = VOICE_SPEED;
+            window.speechSynthesis.speak(u);
+            history.push({role:"user", content:text}, {role:"assistant", content:reply});
+        } catch(e) { addMsg("Error.", "ai"); }
     }
 
     document.getElementById('hint-btn').onclick = () => {
-        addMsg("💡 Try using: 'Can you repeat?', 'I think that...', or a keyword from the top!", "ai");
+        addMsg("💡 Try saying: 'I'm not sure, but...', 'Could you explain?', or use a word from the list!", "ai");
     };
 
     function startTimer() {
@@ -208,11 +237,12 @@ part3 = """
 
     async function stopSession() {
         timerActive = false; rec.stop();
-        addMsg("⌛ Fin ! Analyse en cours...", "ai");
+        addMsg("⌛ Session Finished! Downloading your report...", "ai");
         
-        const evalPrompt = `Analyse la session de ${USER_NAME}. Il a parlé à ${PERSONA}.
-        Mots validés: ${Array.from(foundVocab).join(', ')}. Fillers détectés: ${fillerCount}.
-        Tutoie l'élève. Structure: Lexique, Grammaire, Fluidité (en évitant les 'euh'), Note /20.
+        const evalPrompt = `Évalue la session de ${USER_NAME} (Tutoiement).
+        Mots du PDF validés: ${Array.from(foundVocab).join(', ')}.
+        Objectif Grammaire: ${GRAMMAR_TARGET}.
+        Score: ${score}.
         Transcript: ${fullTranscript}`;
 
         const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -220,7 +250,7 @@ part3 = """
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
             body: JSON.stringify({
                 model: "gpt-4o-mini",
-                messages: [{role:"system", content: "Prof Belge expert."}, {role:"user", content: evalPrompt}]
+                messages: [{role:"system", content: "Expert FWB."}, {role:"user", content: evalPrompt}]
             })
         });
         const d = await r.json();
