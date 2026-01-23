@@ -1,37 +1,44 @@
 import streamlit as st
-import google.generativeai as genai
-from gtts import gTTS
 import tempfile
 import os
 
-# Configuration de la page
-st.set_page_config(page_title="English Buddy AI", page_icon="🇬🇧")
-
+# --- CONFIGURATION DE LA PAGE ---
+st.set_page_config(page_title="English Buddy (OpenAI)", page_icon="🇬🇧")
 st.title("🇬🇧 English Buddy")
-st.caption("Ton prof d'anglais personnel dans le cloud ☁️")
+st.caption("Ton prof d'anglais propulsé par OpenAI 🧠")
 
-# --- 1. GESTION DE LA CLÉ API ---
-# On regarde si la clé est dans les "secrets" de Streamlit ou saisie par l'utilisateur
-api_key = st.sidebar.text_input("Clé API Google Gemini", type="password", help="Colle ta clé ici pour activer l'IA")
+# --- VÉRIFICATION DES LIBRAIRIES ---
+try:
+    from openai import OpenAI
+    from gtts import gTTS
+except ImportError as e:
+    st.error("⚠️ Il manque des librairies !")
+    st.info("Vérifiez que votre fichier requirements.txt contient : streamlit, openai, gTTS")
+    st.stop()
 
+# --- 1. GESTION DE LA CLÉ API OPENAI ---
+api_key = st.sidebar.text_input("Clé API OpenAI (sk-...)", type="password", help="Colle ta clé OpenAI ici")
+
+client = None
 if api_key:
     try:
-        genai.configure(api_key=api_key)
+        # Initialisation du client OpenAI
+        client = OpenAI(api_key=api_key)
     except Exception as e:
         st.error(f"Erreur de clé : {e}")
 
-# --- 2. HISTORIQUE DE CONVERSATION ---
-# Streamlit recharge la page à chaque action, on doit sauvegarder l'historique
+# --- 2. HISTORIQUE ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "assistant", "content": "Hello! I am your English Buddy. What is your name?"}
     ]
 
-# Afficher l'historique des messages
+# Afficher la conversation
 for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
+    # On map 'assistant' pour l'affichage
+    role_display = "user" if msg["role"] == "user" else "assistant"
+    with st.chat_message(role_display):
         st.write(msg["content"])
-        # Si c'est un message de l'IA et qu'il a un audio associé (optionnel)
         if "audio" in msg:
             st.audio(msg["audio"], format="audio/mp3")
 
@@ -39,53 +46,53 @@ for msg in st.session_state.messages:
 user_input = st.chat_input("Écris ta réponse ici en anglais...")
 
 if user_input:
-    # A. Afficher le message de l'utilisateur
+    # A. Afficher le message utilisateur
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.write(user_input)
 
-    # B. Générer la réponse de l'IA
-    if not api_key:
-        response_text = "Please enter your API Key in the sidebar to chat with me! 🤖"
+    # B. Générer la réponse (OpenAI)
+    response_text = ""
+    audio_path = None
+
+    if not client:
+        response_text = "Please enter your OpenAI API Key in the sidebar! 🔑"
     else:
         try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            # Prompt pédagogique
-            prompt = f"""
-            Tu es un tuteur d'anglais bienveillant pour un enfant.
-            L'élève dit : "{user_input}".
-            Consignes :
-            1. Réponds en anglais simple (Niveau A1/A2).
-            2. Fais court (max 25 mots).
-            3. Si grosse faute, corrige gentiment.
-            4. Termine TOUJOURS par une question simple pour relancer.
-            """
-            response = model.generate_content(prompt)
-            response_text = response.text
+            # Appel à GPT-4o-mini (Rapide et pas cher) ou gpt-3.5-turbo
+            response = client.chat.completions.create(
+                model="gpt-4o-mini", 
+                messages=[
+                    {"role": "system", "content": """
+                     Tu es un tuteur d'anglais bienveillant pour un enfant.
+                     Réponds en anglais simple (A1/A2).
+                     Fais des phrases courtes (max 25 mots).
+                     Corrige gentiment les fautes.
+                     Termine TOUJOURS par une question simple.
+                     """},
+                    # On inclut l'historique récent pour le contexte (optionnel, ici on met juste le dernier message pour économiser)
+                    {"role": "user", "content": user_input}
+                ]
+            )
+            response_text = response.choices[0].message.content
+
+            # C. Générer l'audio (TTS)
+            tts = gTTS(text=response_text, lang='en')
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
+                tts.save(fp.name)
+                audio_path = fp.name
+
         except Exception as e:
-            response_text = f"Sorry, I have a headache (Error: {e})"
+            response_text = f"Sorry, error connecting to OpenAI: {e}"
 
-    # C. Générer l'audio (TTS)
-    # On crée un fichier temporaire pour le son
-    try:
-        tts = gTTS(text=response_text, lang='en')
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
-            tts.save(fp.name)
-            audio_path = fp.name
-    except Exception as e:
-        audio_path = None
-        st.error(f"Erreur Audio: {e}")
-
-    # D. Afficher la réponse de l'IA
+    # D. Afficher la réponse
     with st.chat_message("assistant"):
         st.write(response_text)
         if audio_path:
             st.audio(audio_path, format="audio/mp3")
 
-    # E. Sauvegarder dans l'historique
-    message_data = {"role": "assistant", "content": response_text}
+    # E. Sauvegarder
+    msg_data = {"role": "assistant", "content": response_text}
     if audio_path:
-        # Note: Dans une vraie appli, il faudrait gérer le nettoyage des fichiers temp
-        message_data["audio"] = audio_path
-    
-    st.session_state.messages.append(message_data)
+        msg_data["audio"] = audio_path
+    st.session_state.messages.append(msg_data)
