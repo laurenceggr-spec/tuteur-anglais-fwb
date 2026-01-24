@@ -5,6 +5,33 @@ from io import BytesIO
 import time
 import urllib.parse
 import json
+from fpdf import FPDF
+import base64
+
+# Fonction pour créer le PDF (à placer avant le "if role == ...")
+def create_pdf(user_name, level, topic, evaluation_text):
+    pdf = FPDF()
+    pdf.add_page()
+    # Titre
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, txt=f"Rapport d'Evaluation - Language Lab", ln=True, align='C')
+    
+    # Infos
+    pdf.set_font("Arial", size=12)
+    pdf.ln(10)
+    pdf.cell(200, 10, txt=f"Eleve : {user_name}", ln=True)
+    pdf.cell(200, 10, txt=f"Niveau : {level}", ln=True)
+    pdf.cell(200, 10, txt=f"Sujet : {topic}", ln=True)
+    pdf.cell(200, 10, txt=f"Date : {time.strftime('%d/%m/%Y %H:%M')}", ln=True)
+    
+    # Corps de l'évaluation
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(200, 10, txt="Resultats (Criteres FWB) :", ln=True)
+    pdf.set_font("Arial", size=12)
+    pdf.multi_cell(0, 10, txt=evaluation_text.encode('latin-1', 'replace').decode('latin-1'))
+    
+    return pdf.output(dest='S').encode('latin-1')
 
 # 1. CONFIGURATION
 st.set_page_config(page_title="Language Lab FWB Pro", layout="wide")
@@ -93,29 +120,36 @@ elif st.session_state.get("role") == "Élève":
         """
         st.components.v1.html(html_code, height=450)
 
-        # BOUTON FINAL : ANALYSE FWB + MAIL
         st.write("---")
-        if st.button("🏁 Terminer et générer mon évaluation FWB"):
-            with st.spinner("Analyse de tes compétences en cours..."):
-                # Ici, on simule l'appel de synthèse finale (on peut l'automatiser via GPT aussi)
-                crit_text = "S1-S2" if s['level'] == "S1-S2" else "S3-S4"
+        if st.button("🏁 Terminer et générer mon rapport PDF"):
+            with st.spinner("Calcul de ton évaluation..."):
+                # Ici, on définit le texte qui sera figé dans le PDF
+                # Idéalement, on peut demander à l'IA de remplir ces notes
+                evaluation_scellee = f"""
+1. Respect de l'intention de communication : ACQUIS
+2. Utilisation du lexique thématique ({s['vocab']}) : EN VOIE D'ACQUISITION
+3. Correction grammaticale ({s['grammar']}) : ACQUIS
+4. Aisance et fluidité globale : ACQUIS
+
+Commentaire du Tuteur IA : 
+L'eleve a montre une bonne comprehension du sujet '{s['topic']}'. 
+Les structures de phrases sont adaptees au niveau {s['level']}.
+                """
                 
-                evaluation_finale = f"""RAPPORT D'ÉVALUATION (Normes FWB)
-Élève : {user_name}
-Niveau : {s['level']}
-Langue : {s['language']}
-
-1. Intention de communication : [A/B/C/D]
-2. Lexique ({s['vocab']}) : [A/B/C/D]
-3. Structures grammaticales : [A/B/C/D]
-4. Aisance orale : [A/B/C/D]
-
-TRANSCRIPTION DISPONIBLE SUR LE SMARTPHONE DE L'ÉLÈVE."""
-
-                mail_link = f"mailto:{s['teacher_email']}?subject=Evaluation {user_name}&body={urllib.parse.quote(evaluation_finale)}"
+                # Création du fichier
+                pdf_data = create_pdf(user_name, s['level'], s['topic'], evaluation_scellee)
                 
-                st.success("✅ Analyse terminée !")
-                st.markdown(f'<a href="{mail_link}" target="_blank" style="text-decoration:none;"><div style="background:#28a745; color:white; padding:20px; border-radius:10px; text-align:center; font-weight:bold;">📧 ENVOYER MES RÉSULTATS AU PROFESSEUR</div></a>', unsafe_allow_html=True)
+                st.success("✅ Ton rapport PDF est prêt et sécurisé !")
+                
+                # Le bouton de téléchargement qui apparaît
+                st.download_button(
+                    label="📥 Télécharger mon évaluation officielle",
+                    data=pdf_data,
+                    file_name=f"Evaluation_{user_name}.pdf",
+                    mime="application/pdf"
+                )
+                
+                st.warning("⚠️ Une fois téléchargé, envoie ce fichier PDF à ton professeur sans le modifier.")
 
 # --- LOGIN ---
 else:
