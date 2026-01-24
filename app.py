@@ -147,51 +147,39 @@ elif st.session_state.get("role") == "Élève":
             # GENERATION PDF SECURISE
             st.divider()
             if st.button("🏁 Terminer et générer mon rapport PDF"):
-            with st.spinner("Analyse de tes progrès..."):
-                # Définition des critères FWB avec langage positif et tutoiement
-                if s['level'] == "S1-S2":
-                    eval_detaillee = f"""
-    Bravo {user_name} ! Tu viens de terminer ta session d'entraînement. 
-    Voici ton bilan de compétences en langage positif :
+            with st.spinner("Analyse objective de ta prestation..."):
+                # On demande à l'IA de générer le feedback basé sur l'historique
+                # 'messages' contient toute la conversation
+                try:
+                    import openai
+                    response = openai.ChatCompletion.create(
+                        model="gpt-4o-mini",
+                        api_key=api_key,
+                        messages=[
+                            {"role": "system", "content": f"""Tu es un examinateur de langue strict mais juste. 
+                            Analyse la conversation de l'élève au niveau {s['level']}. 
+                            Rédige un bilan en utilisant le TU, avec un ton professionnel et objectif.
+                            Divise en deux parties : 
+                            1. Points forts (sois bref si l'effort est faible).
+                            2. Axes d'amélioration (sois très précis sur la grammaire, la prononciation et l'effort de communication).
+                            Si l'élève a fait trop d'erreurs ou n'a pas assez parlé, signale-le clairement comme un obstacle à la progression."""},
+                            {"role": "user", "content": f"Voici l'historique : {messages}"}
+                        ]
+                    )
+                    feedback_ia = response.choices[0].message.content
+                except:
+                    feedback_ia = "L'analyse automatique n'a pas pu être générée. Réessaie."
 
-    🌟 CE QUE TU AS BIEN RÉUSSI :
-    - Intention de communication : Tu as réussi à te faire comprendre et à répondre aux questions sur le sujet '{s['topic']}'. C'est acquis !
-    - Lexique et vocabulaire : Tu as utilisé avec succès plusieurs mots-clés comme : {s['vocab']}.
-
-    🚀 TON PROCHAIN DÉFI :
-    - Correction grammaticale : Continue à bien faire attention au '{s['grammar']}'. Tu es sur la bonne voie !
-    - Aisance : N'hésite pas à faire des phrases un peu plus longues la prochaine fois pour gagner en fluidité.
-
-    Note globale : Très encourageant. Continue comme ça !
-                    """
-                else: # Pour le niveau S3-S4
-                    eval_detaillee = f"""
-    Félicitations pour ton travail, {user_name} ! 
-    Voici ton analyse détaillée pour cette session :
-
-    🌟 TES POINTS FORTS :
-    - Pertinence et contenu : Tu as su maintenir l'échange sur le thème '{s['topic']}' de manière efficace.
-    - Interaction : Tu as bien réagi aux relances du tuteur IA, c'est un excellent point pour ton aisance.
-
-    🚀 TES AXES D'AMÉLIORATION :
-    - Richesse lexicale : Essaie d'intégrer encore plus de connecteurs logiques pour structurer tes idées.
-    - Précision : Travaille la complexité de tes phrases pour atteindre le palier supérieur.
-
-    Note globale : Beau travail de réflexion et de communication !
-                    """
+                # Création du PDF avec le retour de l'IA
+                pdf_data = create_pdf(user_name, s['level'], s['topic'], feedback_ia)
                 
-                # Création du PDF avec ce texte bienveillant
-                pdf_data = create_pdf(user_name, s['level'], s['topic'], eval_detaillee)
-                
-                st.success(f"✅ Super {user_name} ! Ton bilan est prêt.")
-                
+                st.success("✅ Ton bilan objectif est prêt.")
                 st.download_button(
-                    label="📥 Télécharger mon bilan de compétences (PDF)",
+                    label="📥 Télécharger mon rapport d'évaluation (PDF)",
                     data=pdf_data,
                     file_name=f"Bilan_{user_name}.pdf",
                     mime="application/pdf"
                 )
-                st.info("Ce document reflète tes efforts d'aujourd'hui. Partage-le avec ton professeur !")
 
 # --- LOGIN ---
 else:
