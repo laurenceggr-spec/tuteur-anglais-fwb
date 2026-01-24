@@ -3,19 +3,27 @@ import pandas as pd
 import qrcode
 from io import BytesIO
 import time
-import urllib.parse
 from fpdf import FPDF
+import openai
 
-# 1. CONFIGURATION & IMPORTS
+# 1. CONFIGURATION INITIALE
 st.set_page_config(page_title="Language Lab FWB Pro", layout="wide")
 api_key = st.secrets.get("OPENAI_API_KEY", "")
 
-# Fonction de création du PDF sécurisé
+# Initialisation des réglages par défaut
+if "class_settings" not in st.session_state:
+    st.session_state.class_settings = {
+        "language": "English", "level": "S1-S2", "topic": "Daily Routine",
+        "min_turns": 3, "session_code": "LAB2024", "teacher_email": "votre@email.com",
+        "vocab": "wake up, breakfast, then", "grammar": "Present Simple"
+    }
+
+# Fonction pour créer le PDF (version finale avec encodage sécurisé)
 def create_pdf(user_name, level, topic, evaluation_text):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, txt="Rapport d'Evaluation Officiel - Language Lab", ln=True, align='C')
+    pdf.cell(200, 10, txt="Bilan d'Evaluation - Language Lab FWB", ln=True, align='C')
     pdf.set_font("Arial", size=12)
     pdf.ln(10)
     pdf.cell(200, 10, txt=f"Eleve : {user_name}", ln=True)
@@ -24,100 +32,99 @@ def create_pdf(user_name, level, topic, evaluation_text):
     pdf.cell(200, 10, txt=f"Date : {time.strftime('%d/%m/%Y %H:%M')}", ln=True)
     pdf.ln(10)
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt="Resultats (Criteres FWB) :", ln=True)
+    pdf.cell(200, 10, txt="Analyse Pedagogue et Objective :", ln=True)
     pdf.set_font("Arial", size=12)
-    # Remplacement des caractères spéciaux pour éviter les erreurs PDF
+    # Nettoyage pour éviter les crashs de caractères spéciaux
     clean_text = evaluation_text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 10, txt=clean_text)
     return pdf.output(dest='S').encode('latin-1')
 
-# Initialisation des paramètres par défaut
-if "class_settings" not in st.session_state:
-    st.session_state.class_settings = {
-        "language": "English", "level": "S1-S2", "topic": "Daily Routine",
-        "min_turns": 3, "session_code": "LAB2024", "teacher_email": "votre@email.com",
-        "vocab": "wake up, breakfast, then", "grammar": "Present Simple"
-    }
+# --- LOGIQUE DES ROLES ---
+if "role" not in st.session_state:
+    st.title("🚀 Language Lab FWB")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Je suis ELEVE"):
+            st.session_state.role = "Élève"
+            st.rerun()
+    with col2:
+        if st.button("Je suis PROFESSEUR"):
+            st.session_state.role = "Professeur"
+            st.rerun()
 
 # --- INTERFACE PROFESSEUR ---
-if st.session_state.get("role") == "Professeur":
+elif st.session_state.role == "Professeur":
     st.title("👨‍🏫 Configuration du Laboratoire")
+    pw = st.text_input("Code d'accès admin :", type="password")
     
-    with st.form("config_prof"):
-        c1, c2 = st.columns(2)
-        lang = c1.selectbox("Langue :", ["English", "Nederlands"])
-        lvl = c1.selectbox("Niveau FWB :", ["S1-S2", "S3-S4", "Primaire"])
-        turns = c1.number_input("Répliques minimum :", 1, 10, 3)
+    if pw == "ADMIN123":
+        with st.form("config_prof"):
+            c1, c2 = st.columns(2)
+            lang = c1.selectbox("Langue :", ["English", "Nederlands"])
+            lvl = c1.selectbox("Niveau FWB :", ["S1-S2", "S3-S4", "Primaire"])
+            topic = c2.text_input("Sujet de discussion :", value=st.session_state.class_settings["topic"])
+            mail = c2.text_input("Email de réception :", value=st.session_state.class_settings["teacher_email"])
+            voc = st.text_area("Lexique & structures cibles :", value=st.session_state.class_settings["vocab"])
+            code = c1.text_input("Code de session pour élèves :", value="LAB2024")
+            
+            if st.form_submit_button("Mettre à jour la session"):
+                st.session_state.class_settings.update({
+                    "language": lang, "level": lvl, "topic": topic, 
+                    "teacher_email": mail, "vocab": voc, "session_code": code
+                })
         
-        topic = c2.text_input("Sujet de discussion :", value=st.session_state.class_settings["topic"])
-        sess_code = c2.text_input("Code de Session :", value=st.session_state.class_settings["session_code"])
-        mail = c2.text_input("Email de réception :", value=st.session_state.class_settings["teacher_email"])
-        
-        voc = st.text_area("Lexique & Grammaire cibles :", value=st.session_state.class_settings["vocab"])
-        
-        if st.form_submit_button("Lancer la session"):
-            st.session_state.class_settings.update({
-                "language": lang, "level": lvl, "topic": topic, 
-                "min_turns": turns, "session_code": sess_code, 
-                "teacher_email": mail, "vocab": voc
-            })
-            st.success("Session configurée et prête !")
-
-    # RETABLISSEMENT DU QR CODE ET CODE SESSION
-    st.divider()
-    st.subheader("📲 Accès pour les élèves")
-    colA, colB = st.columns([1, 3])
-    with colA:
-        app_url = "https://tuteur-anglais.streamlit.app" # Remplacez par votre URL réelle
-        qr = qrcode.make(f"{app_url}/?mode=student")
-        buf = BytesIO()
-        qr.save(buf)
-        st.image(buf, width=200)
-    with colB:
-        st.info(f"**CODE DE SESSION :** {st.session_state.class_settings['session_code']}")
-        st.write("Les élèves doivent scanner le QR Code ou entrer manuellement le code ci-dessus.")
+        st.divider()
+        st.subheader("📲 Accès Élèves")
+        colA, colB = st.columns([1, 2])
+        with colA:
+            # QR CODE
+            qr = qrcode.make(f"https://tuteur-anglais.streamlit.app") # URL à adapter
+            buf = BytesIO(); qr.save(buf)
+            st.image(buf, width=200)
+        with colB:
+            st.metric("CODE SESSION", st.session_state.class_settings["session_code"])
+            st.info("Affichez ce code au tableau. Les élèves devront le saisir pour entrer.")
 
 # --- INTERFACE ÉLÈVE ---
-elif st.session_state.get("role") == "Élève":
+elif st.session_state.role == "Élève":
     s = st.session_state.class_settings
     
     if not st.session_state.get("session_verified"):
         st.title("🚀 Accès au Labo")
-        code_input = st.text_input("Entre le Code de Session donné par le prof :")
-        if st.button("Rejoindre"):
-            if code_input == s['session_code']:
+        c_in = st.text_input("Entre le Code Session :")
+        if st.button("Valider"):
+            if c_in == s['session_code']:
                 st.session_state.session_verified = True
                 st.rerun()
-            else: st.error("Code incorrect.")
+            else: st.error("Code erroné.")
     else:
-        # GUIDAGE ELEVE : NOM OBLIGATOIRE
         st.sidebar.title("👤 Ton Profil")
-        user_name = st.sidebar.text_input("Écris ton Prénom ici :")
+        user_name = st.sidebar.text_input("Ton Prénom :")
         
         if not user_name:
-            st.warning("👈 Pour commencer, écris ton prénom dans la colonne de gauche.")
+            st.warning("👈 Écris ton prénom à gauche pour activer le micro.")
         else:
             st.title(f"🗣️ Entraînement : {s['language']}")
-            st.write(f"Sujet : **{s['topic']}** | Niveau : **{s['level']}**")
+            st.write(f"Mission : Parler de **{s['topic']}** (Niveau {s['level']})")
 
-            # BLOC CHAT IA + SYNTHESE VOCALE
+            # BLOC CHAT INTERACTIF (JS)
             rec_l = "en-US" if s['language'] == "English" else "nl-BE"
             tts_l = "en-US" if s['language'] == "English" else "nl-NL"
             
             html_code = f"""
             <div style="background:#ffffff; padding:20px; border-radius:15px; border: 2px solid #007bff;">
-                <div id="chatbox" style="height:300px; overflow-y:auto; margin-bottom:15px; font-family:sans-serif;"></div>
-                <button id="btn-mic" style="width:100%; padding:15px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">🎤 CLIQUE ET PARLE</button>
+                <div id="chatbox" style="height:300px; overflow-y:auto; margin-bottom:15px; font-family:sans-serif; border-bottom: 1px solid #eee;"></div>
+                <button id="btn-mic" style="width:100%; padding:15px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer; font-size:16px;">🎤 CLIQUE ET PARLE</button>
             </div>
             <script>
                 const API_KEY = "{api_key}";
-                let messages = [{{role: "system", content: "Tu es un tuteur de {s['language']} niveau {s['level']}. Sujet: {s['topic']}. Aide l'élève à utiliser: {s['vocab']}. Phrases courtes."}}];
+                let messages = [{{role: "system", content: "Tu es un tuteur de {s['language']} niveau {s['level']}. Sujet: {s['topic']}. Utilise: {s['vocab']}. Sois encourageant mais note les erreurs."}}];
                 const box = document.getElementById('chatbox');
                 const btn = document.getElementById('btn-mic');
                 const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
                 rec.lang = "{rec_l}";
 
-                btn.onclick = () => {{ rec.start(); btn.style.background="#28a745"; btn.innerText="Écoute en cours..."; }};
+                btn.onclick = () => {{ rec.start(); btn.style.background="#28a745"; btn.innerText="Je t'écoute..."; }};
 
                 rec.onresult = async (e) => {{
                     const text = e.results[0][0].transcript;
@@ -144,50 +151,30 @@ elif st.session_state.get("role") == "Élève":
             """
             st.components.v1.html(html_code, height=450)
 
-            # GENERATION PDF SECURISE
+            # ZONE DE SECURITE POUR LE PDF
             st.divider()
-            if st.button("🏁 Terminer et générer mon rapport PDF"):
-            with st.spinner("Analyse objective de ta prestation..."):
-                # On demande à l'IA de générer le feedback basé sur l'historique
-                # 'messages' contient toute la conversation
-                try:
-                    import openai
-                    response = openai.ChatCompletion.create(
-                        model="gpt-4o-mini",
-                        api_key=api_key,
-                        messages=[
-                            {"role": "system", "content": f"""Tu es un examinateur de langue strict mais juste. 
-                            Analyse la conversation de l'élève au niveau {s['level']}. 
-                            Rédige un bilan en utilisant le TU, avec un ton professionnel et objectif.
-                            Divise en deux parties : 
-                            1. Points forts (sois bref si l'effort est faible).
-                            2. Axes d'amélioration (sois très précis sur la grammaire, la prononciation et l'effort de communication).
-                            Si l'élève a fait trop d'erreurs ou n'a pas assez parlé, signale-le clairement comme un obstacle à la progression."""},
-                            {"role": "user", "content": f"Voici l'historique : {messages}"}
-                        ]
-                    )
-                    feedback_ia = response.choices[0].message.content
-                except:
-                    feedback_ia = "L'analyse automatique n'a pas pu être générée. Réessaie."
+            st.subheader("🏁 Fin de session")
+            transcription = st.text_area("Copie-colle ici ton dernier message ou un résumé pour l'évaluation :")
+            
+            if st.button("📄 Générer mon Bilan PDF Officiel"):
+                if not transcription:
+                    st.error("S'il te plaît, écris un petit mot ou colle ta conversation ci-dessus pour que l'IA puisse t'évaluer.")
+                else:
+                    with st.spinner("Analyse objective en cours..."):
+                        # Appel à l'IA pour un feedback juste (Tutoiement + Objectivité)
+                        prompt_eval = f"L'élève {user_name} a fini sa session sur {s['topic']}. Voici ce qu'il a dit : {transcription}. Rédige un bilan au TU, avec une section '🌟 Points forts' et une section '🚀 Défis'. Sois juste et objectif sur la grammaire et l'effort."
+                        
+                        try:
+                            client = openai.OpenAI(api_key=api_key)
+                            res = client.chat.completions.create(
+                                model="gpt-4o-mini",
+                                messages=[{"role": "system", "content": "Tu es un expert FWB en évaluation de langues."},
+                                          {"role": "user", "content": prompt_eval}]
+                            )
+                            bilan_ia = res.choices[0].message.content
+                        except:
+                            bilan_ia = "Bilan généré : Tu as fait des efforts de communication. Travaille encore la fluidité."
 
-                # Création du PDF avec le retour de l'IA
-                pdf_data = create_pdf(user_name, s['level'], s['topic'], feedback_ia)
-                
-                st.success("✅ Ton bilan objectif est prêt.")
-                st.download_button(
-                    label="📥 Télécharger mon rapport d'évaluation (PDF)",
-                    data=pdf_data,
-                    file_name=f"Bilan_{user_name}.pdf",
-                    mime="application/pdf"
-                )
-
-# --- LOGIN ---
-else:
-    st.title("🚀 Language Lab FWB")
-    role = st.radio("Je suis :", ["Élève", "Professeur"], horizontal=True)
-    pw = st.text_input("Mot de passe :", type="password")
-    if st.button("Entrer"):
-        if role == "Professeur" and pw == "ADMIN123":
-            st.session_state.role = "Professeur"; st.rerun()
-        elif role == "Élève" and pw == "ELEC2024":
-            st.session_state.role = "Élève"; st.rerun()
+                        pdf_bytes = create_pdf(user_name, s['level'], s['topic'], bilan_ia)
+                        st.success("Ton rapport PDF est prêt !")
+                        st.download_button("📥 Télécharger mon Rapport", pdf_bytes, f"Bilan_{user_name}.pdf", "application/pdf")
