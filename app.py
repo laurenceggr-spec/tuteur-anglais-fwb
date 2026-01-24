@@ -152,7 +152,7 @@ elif st.session_state.get("role") == "Élève":
             """
             st.components.v1.html(html_code, height=350)
             
-  if st.button("🏁 Terminer et Envoyer au prof"):
+            if st.button("🏁 Terminer et Envoyer au prof"):
                 # 1. Préparation des données sous forme de dictionnaire de listes (format DataFrame requis)
                 new_row = {
                     "Heure": [time.strftime("%H:%M")],
