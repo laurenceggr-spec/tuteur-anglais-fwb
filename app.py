@@ -153,37 +153,35 @@ elif st.session_state.get("role") == "Élève":
             st.components.v1.html(html_code, height=350)
             
             if st.button("🏁 Terminer et Envoyer au prof"):
-                # 1. Préparation des données sous forme de dictionnaire de listes (format DataFrame requis)
+                # On force les données sous forme de listes [] pour créer un tableau propre
                 new_row = {
                     "Heure": [time.strftime("%H:%M")],
                     "Élève": [user_name],
                     "Langue": [s['language']],
                     "Sujet": [s['topic']],
-                    "Score": ["15/20"], # On pourra automatiser ce calcul plus tard
-                    "Évaluation": [f"Session terminée avec succès par {user_name}."]
+                    "Score": ["15/20"],
+                    "Évaluation": [f"Session terminée par {user_name}."]
                 }
                 
-                # 2. Transformation en tableau pandas
                 new_df = pd.DataFrame(new_row)
                 
                 try:
-                    # 3. Lecture des données existantes (pour ne pas écraser les autres élèves)
-                    # Note : On utilise st.secrets pour l'URL si configuré, sinon SQL_URL
+                    # On récupère l'URL directement depuis les secrets pour éviter les erreurs de lien
                     target_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
                     
+                    # On lit d'abord ce qui existe
                     existing_df = conn.read(spreadsheet=target_url, worksheet="Sheet1")
                     
-                    # 4. Fusion (Ajout de la nouvelle ligne à la suite)
-                    updated_df = pd.concat([existing_data, new_df], ignore_index=True)
+                    # On ajoute la nouvelle ligne au-dessous
+                    updated_df = pd.concat([existing_df, new_df], ignore_index=True)
                     
-                    # 5. Mise à jour du Google Sheet
+                    # On renvoie le tout vers Google
                     conn.update(spreadsheet=target_url, data=updated_df)
                     
-                    st.success("✅ Félicitations ! Tes résultats sont sur l'ordinateur du professeur.")
+                    st.success("✅ Données envoyées au prof !")
                     st.balloons()
                 except Exception as e:
                     st.error(f"Erreur d'envoi Cloud : {e}")
-                    st.info("Vérifie que l'onglet s'appelle bien 'Sheet1' et que le partage est sur 'Éditeur'.")
 # --- LOGIN ---
 else:
     st.title("🚀 Language Lab FWB")
