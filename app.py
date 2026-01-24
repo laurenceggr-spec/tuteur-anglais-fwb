@@ -11,7 +11,7 @@ api_key = st.secrets.get("OPENAI_API_KEY", "")
 
 # 2. CONNEXION CLOUD (Le pont entre appareils)
 # Remplace par l'URL de ton Google Sheet (Partagé en "Éditeur" pour tous)
-SQL_URL = "TON_URL_GOOGLE_SHEET_ICI" 
+SQL_URL = "https://docs.google.com/spreadsheets/d/1QycENconwTyJB8iaF4rccfvwnIyfnqg2_qHHXl_ZaC8/edit?gid=0#gid=0" 
 
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
