@@ -152,36 +152,44 @@ elif st.session_state.get("role") == "Élève":
             """
             st.components.v1.html(html_code, height=350)
             
-            if st.button("🏁 Terminer et Envoyer au prof"):
-                # On force les données sous forme de listes [] pour créer un tableau propre
-                new_row = {
-                    "Heure": [time.strftime("%H:%M")],
-                    "Élève": [user_name],
-                    "Langue": [s['language']],
-                    "Sujet": [s['topic']],
-                    "Score": ["15/20"],
-                    "Évaluation": [f"Session terminée par {user_name}."]
-                }
-                
-                new_df = pd.DataFrame(new_row)
-                
-                try:
-                    # On récupère l'URL directement depuis les secrets pour éviter les erreurs de lien
-                    target_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-                    
-                    # On lit d'abord ce qui existe
-                    existing_df = conn.read(spreadsheet=target_url, worksheet="Sheet1")
-                    
-                    # On ajoute la nouvelle ligne au-dessous
-                    updated_df = pd.concat([existing_df, new_df], ignore_index=True)
-                    
-                    # On renvoie le tout vers Google
-                    conn.update(spreadsheet=target_url, data=updated_df)
-                    
-                    st.success("✅ Données envoyées au prof !")
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"Erreur d'envoi Cloud : {e}")
+            st.divider()
+            st.subheader("🏁 Fin de session")
+            
+            # 1. On prépare le contenu du mail
+            prof_email = s['teacher_email']
+            sujet = f"Evaluation Anglais - {user_name}"
+            corps_du_mail = f"""Bonjour Monsieur, 
+            
+Voici mes résultats pour la session sur : {s['topic']}.
+Nom de l'élève : {user_name}
+Langue : {s['language']}
+Score estimé : 15/20
+
+Commentaire : L'élève a bien participé à la conversation orale."""
+
+            # 2. On encode le message pour qu'il soit lisible par un lien web (URL Encoding)
+            import urllib.parse
+            mail_link = f"mailto:{prof_email}?subject={urllib.parse.quote(sujet)}&body={urllib.parse.quote(corps_du_mail)}"
+
+            # 3. On crée un bouton stylé qui ouvre l'application mail du smartphone
+            st.markdown(f"""
+                <a href="{mail_link}" target="_blank" style="text-decoration: none;">
+                    <div style="
+                        background-color: #007bff;
+                        color: white;
+                        padding: 15px;
+                        text-align: center;
+                        border-radius: 10px;
+                        font-weight: bold;
+                        font-size: 18px;
+                        cursor: pointer;
+                        border: none;">
+                        📧 Cliquer ici pour envoyer mes résultats
+                    </div>
+                </a>
+                """, unsafe_allow_html=True)
+            
+            st.info("💡 Une fois que tu as cliqué, ton application mail s'ouvrira. Appuie simplement sur 'Envoyer' dans ton mail.")
 # --- LOGIN ---
 else:
     st.title("🚀 Language Lab FWB")
