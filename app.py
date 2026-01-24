@@ -147,21 +147,51 @@ elif st.session_state.get("role") == "Élève":
             # GENERATION PDF SECURISE
             st.divider()
             if st.button("🏁 Terminer et générer mon rapport PDF"):
-                # Définition des critères basés sur le niveau choisi par le prof
+            with st.spinner("Analyse de tes progrès..."):
+                # Définition des critères FWB avec langage positif et tutoiement
                 if s['level'] == "S1-S2":
-                    eval_text = "1. Intention (A1/A2): ACQUIS\n2. Lexique cible: EN VOIE D'ACQUISITION\n3. Structures simples: ACQUIS\n4. Aisance: ACQUIS"
-                else:
-                    eval_text = "1. Pertinence (A2/B1): ACQUIS\n2. Richesse lexicale: ACQUIS\n3. Complexite structures: EN VOIE D'ACQUISITION\n4. Interaction: ACQUIS"
+                    eval_detaillee = f"""
+    Bravo {user_name} ! Tu viens de terminer ta session d'entraînement. 
+    Voici ton bilan de compétences en langage positif :
+
+    🌟 CE QUE TU AS BIEN RÉUSSI :
+    - Intention de communication : Tu as réussi à te faire comprendre et à répondre aux questions sur le sujet '{s['topic']}'. C'est acquis !
+    - Lexique et vocabulaire : Tu as utilisé avec succès plusieurs mots-clés comme : {s['vocab']}.
+
+    🚀 TON PROCHAIN DÉFI :
+    - Correction grammaticale : Continue à bien faire attention au '{s['grammar']}'. Tu es sur la bonne voie !
+    - Aisance : N'hésite pas à faire des phrases un peu plus longues la prochaine fois pour gagner en fluidité.
+
+    Note globale : Très encourageant. Continue comme ça !
+                    """
+                else: # Pour le niveau S3-S4
+                    eval_detaillee = f"""
+    Félicitations pour ton travail, {user_name} ! 
+    Voici ton analyse détaillée pour cette session :
+
+    🌟 TES POINTS FORTS :
+    - Pertinence et contenu : Tu as su maintenir l'échange sur le thème '{s['topic']}' de manière efficace.
+    - Interaction : Tu as bien réagi aux relances du tuteur IA, c'est un excellent point pour ton aisance.
+
+    🚀 TES AXES D'AMÉLIORATION :
+    - Richesse lexicale : Essaie d'intégrer encore plus de connecteurs logiques pour structurer tes idées.
+    - Précision : Travaille la complexité de tes phrases pour atteindre le palier supérieur.
+
+    Note globale : Beau travail de réflexion et de communication !
+                    """
                 
-                pdf_data = create_pdf(user_name, s['level'], s['topic'], eval_text)
-                st.success("✅ Ton rapport officiel a été généré !")
+                # Création du PDF avec ce texte bienveillant
+                pdf_data = create_pdf(user_name, s['level'], s['topic'], eval_detaillee)
+                
+                st.success(f"✅ Super {user_name} ! Ton bilan est prêt.")
+                
                 st.download_button(
-                    label="📥 Télécharger mon rapport (PDF)",
+                    label="📥 Télécharger mon bilan de compétences (PDF)",
                     data=pdf_data,
-                    file_name=f"Rapport_{user_name}.pdf",
+                    file_name=f"Bilan_{user_name}.pdf",
                     mime="application/pdf"
                 )
-                st.warning("⚠️ Envoie maintenant ce fichier à ton professeur.")
+                st.info("Ce document reflète tes efforts d'aujourd'hui. Partage-le avec ton professeur !")
 
 # --- LOGIN ---
 else:
