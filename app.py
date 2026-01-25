@@ -8,7 +8,6 @@ from openai import OpenAI
 st.set_page_config(page_title="Language Lab FWB Pro", layout="wide")
 client = OpenAI(api_key=st.secrets.get("OPENAI_API_KEY", ""))
 
-# Initialisation de la mémoire session
 if "class_settings" not in st.session_state:
     st.session_state.class_settings = {
         "language": "English", 
@@ -21,7 +20,6 @@ if "class_settings" not in st.session_state:
         "custom_prompt": "Fais semblant d'être un serveur dans un café."
     }
 
-# --- FONCTION PDF (CONFORME PAGE 4 - GRILLE ABCD) ---
 def create_pdf(user_name, level, topic, evaluation_text):
     pdf = FPDF()
     pdf.add_page()
@@ -36,14 +34,12 @@ def create_pdf(user_name, level, topic, evaluation_text):
     pdf.multi_cell(0, 7, txt=clean_text)
     return pdf.output(dest='S').encode('latin-1')
 
-# --- LOGIQUE DES ROLES ---
 if "role" not in st.session_state:
     st.title("🚀 Language Lab FWB")
     c1, c2 = st.columns(2)
     if c1.button("Accès ÉLÈVE"): st.session_state.role = "Élève"; st.rerun()
     if c2.button("Accès PROFESSEUR"): st.session_state.role = "Professeur"; st.rerun()
 
-# --- INTERFACE PROFESSEUR ---
 elif st.session_state.role == "Professeur":
     st.title("👨‍🏫 Configuration du Laboratoire")
     with st.form("config_pro"):
@@ -61,7 +57,6 @@ elif st.session_state.role == "Professeur":
         voc = st.text_area("Vocabulaire attendu :", value=st.session_state.class_settings["vocab"])
         mission = st.text_area("🎯 MISSION DU TUTEUR :", value=st.session_state.class_settings["custom_prompt"])
         
-        # LE BOUTON DE VALIDATION (OBLIGATOIRE DANS LE FORM)
         submitted = st.form_submit_button("✅ Enregistrer et Publier la session")
         if submitted:
             st.session_state.class_settings.update({
@@ -79,21 +74,20 @@ elif st.session_state.role == "Professeur":
     with col_b:
         st.info(f"### 🔑 Code Élève : **{st.session_state.class_settings['session_code']}**")
 
-# --- INTERFACE ÉLÈVE ---
 elif st.session_state.role == "Élève":
     s = st.session_state.class_settings
     st.title(f"🗣️ Labo : {s['topic']}")
     
     user_name = st.sidebar.text_input("Ton Prénom :")
-    input_code = st.sidebar.text_input("Code de session (donné par le prof) :")
+    input_code = st.sidebar.text_input("Code de session :")
     
     if not user_name or input_code != s['session_code']:
-        st.warning("👈 Entre ton prénom et le code de session correct pour activer le micro.")
+        st.warning("👈 Entre ton prénom et le code de session correct.")
     else:
         rec_l = "en-US" if s['language'] == "English" else "nl-BE"
         tts_l = "en-US" if s['language'] == "English" else "nl-NL"
         
-        adapt_prompt = f"Tu es un tuteur de {s['language']} ({s['level']}). MISSION: {s['custom_prompt']}. PARLE UNIQUEMENT EN {s['language']}. Sois bienveillant."
+        adapt_prompt = f"Tu es un tuteur de {s['language']} ({s['level']}). MISSION: {s['custom_prompt']}. PARLE UNIQUEMENT EN {s['language']}."
 
         html_code = f"""
         <div style="background:#f9f9f9; padding:15px; border-radius:10px; border:1px solid #ddd; text-align:center;">
@@ -163,9 +157,4 @@ elif st.session_state.role == "Élève":
                 type_oral = "CONTINU (EOC)" if est_solo else "INTERACTION (EOI)"
                 eval_p = f"Expert Tronc Commun & SEGEC. Evalue {user_name} ({s['level']}) pour Expression Orale {type_oral}. BIENVEILLANCE: Note > 10/20 si communication reussie (ignore erreurs micro). Bareme Page 4: 1xC=8/20, 2xC=6/20."
                 res = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": f"{eval_p} Texte: {trans}"}])
-                bilan_final = res.choices[0].message.content
-                st.markdown(bilan_final)
-                pdf = create_pdf(user_name, s['level'], s['topic'], bilan_final)
-                st.download_button("📥 Télécharger mon PDF", pdf, f"Bilan_{user_name}.pdf")arkdown(bilan_final)
-                pdf = create_pdf(user_name, s['level'], s['topic'], bilan_final)
-                st.download_button("📥 Télécharger mon PDF", pdf, f"Bilan_{user_name}.pdf")
+                bilan_final = res.choices[0].message.
