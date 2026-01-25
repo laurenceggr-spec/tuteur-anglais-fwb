@@ -49,7 +49,7 @@ elif st.session_state.role == "Professeur":
     col_a, col_b = st.columns([1, 2])
     with col_a:
         # Remplacez par votre URL réelle une fois déployé
-        qr = qrcode.make("https://tuteur-anglais-fwb.streamlit.app") 
+        qr = qrcode.make("https://tuteur-anglais.streamlit.app") 
         buf = BytesIO(); qr.save(buf)
         st.image(buf, width=150, caption="Scan pour rejoindre")
     with col_b:
