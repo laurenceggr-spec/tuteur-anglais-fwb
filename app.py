@@ -85,7 +85,7 @@ elif st.session_state.role == "Élève":
         st.warning("👈 Entre ton prénom et le code de session correct.")
     else:
         rec_l = "en-US" if s['language'] == "English" else "nl-BE"
-        tts_l = "en-US" if s['language'] == "English" else "nl-NL"
+        t_l = "en-US" if s['language'] == "English" else "nl-NL"
         
         adapt_prompt = f"Tu es un tuteur de {s['language']} ({s['level']}). MISSION: {s['custom_prompt']}. PARLE UNIQUEMENT EN {s['language']}."
 
@@ -105,10 +105,10 @@ elif st.session_state.role == "Élève":
             const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
             rec.lang = "{rec_l}";
 
-            function speakText(text) {{
+            function speak(text) {{
                 synth.cancel();
                 const u = new SpeechSynthesisUtterance(text);
-                u.lang = "{tts_l}";
+                u.lang = "{t_l}";
                 u.rate = 0.9;
                 setTimeout(() => {{ synth.speak(u); }}, 100);
             }}
@@ -128,7 +128,7 @@ elif st.session_state.role == "Élève":
                     msgs.push({{role: "assistant", content: reply}});
                     chat.innerHTML += `<p><b>Tuteur:</b> ${{reply.replace('Correction:', '<br><small style="color:red;">Correction:</small>')}}</p>`;
                     chat.scrollTop = chat.scrollHeight;
-                    speakText(reply.split('Correction:')[0]);
+                    speak(reply.split('Correction:')[0]);
                     status.innerText = "A toi !";
                 }} catch(e) {{ status.innerText = "Erreur IA."; }}
             }}
@@ -154,7 +154,10 @@ elif st.session_state.role == "Élève":
         if st.button("🏁 Générer mon Bilan Officiel FWB"):
             with st.spinner("Analyse SEGEC / Tronc Commun..."):
                 est_solo = s['mode'] == "Solo (Expression continue)"
-                type_oral = "CONTINU (EOC)" if est_solo else "INTERACTION (EOI)"
-                eval_p = f"Expert Tronc Commun & SEGEC. Evalue {user_name} ({s['level']}) pour Expression Orale {type_oral}. BIENVEILLANCE: Note > 10/20 si communication reussie (ignore erreurs micro). Bareme Page 4: 1xC=8/20, 2xC=6/20."
+                t_oral = "CONTINU (EOC)" if est_solo else "INTERACTION (EOI)"
+                eval_p = f"Expert Tronc Commun & SEGEC. Evalue {user_name} ({s['level']}) pour Expression Orale {t_oral}. BIENVEILLANCE: Note > 10/20 si communication reussie (ignore erreurs micro). Bareme Page 4: 1xC=8/20, 2xC=6/20."
                 res = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": f"{eval_p} Texte: {trans}"}])
-                bilan_final = res.choices[0].message.
+                bilan_final = res.choices[0].message.content
+                st.markdown(bilan_final)
+                pdf = create_pdf(user_name, s['level'], s['topic'], bilan_final)
+                st.download_button("📥 Télécharger mon PDF", pdf, f"Bilan_{user_name}.pdf")
