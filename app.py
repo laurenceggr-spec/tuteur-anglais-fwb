@@ -23,7 +23,7 @@ if "class_settings" not in st.session_state:
         "custom_prompt": "Fais semblant d'être un serveur dans un café. Demande à l'élève ce qu'il veut manger et boire."
     }
 
-# --- FONCTION PDF (Barème Strict Page 4) ---
+# --- FONCTION PDF (Barème Strict Page 4 - Validé) ---
 def create_pdf(user_name, level, topic, evaluation_text):
     pdf = FPDF()
     pdf.add_page()
@@ -48,7 +48,7 @@ if "role" not in st.session_state:
     if c1.button("Accès ÉLÈVE"): st.session_state.role = "Élève"; st.rerun()
     if c2.button("Accès PROFESSEUR"): st.session_state.role = "Professeur"; st.rerun()
 
-# --- INTERFACE PROFESSEUR ---
+# --- INTERFACE PROFESSEUR (Validé) ---
 elif st.session_state.role == "Professeur":
     st.title("👨‍🏫 Configuration du Laboratoire")
     with st.form("config_pro"):
@@ -69,7 +69,7 @@ elif st.session_state.role == "Professeur":
     qr = qrcode.make("https://tuteur-anglais.streamlit.app")
     buf = BytesIO(); qr.save(buf); st.image(buf, width=150)
 
-# --- INTERFACE ÉLÈVE (Correction du Micro) ---
+# --- INTERFACE ÉLÈVE (Optimisation du Flux de Conversation) ---
 elif st.session_state.role == "Élève":
     s = st.session_state.class_settings
     user_name = st.sidebar.text_input("Ton Prénom :")
@@ -83,15 +83,16 @@ elif st.session_state.role == "Élève":
         tts_l = "en-US" if s['language'] == "English" else "nl-NL"
         
         adapt_prompt = f"""Tu es un tuteur de {s['language']} niveau {s['level']}. 
-        MISSION: {s['custom_prompt']}. Pas de 'Hello how are you'. Entre directement dans le sujet.
-        Primaire A1: mots simples uniquement.
+        MISSION: {s['custom_prompt']}. 
+        IMPORTANT: Ne dis jamais 'Hello how are you'. Entre directement dans le vif du sujet via ta MISSION.
+        Niveau Primaire A1: uniquement des mots simples.
         CORRECTIONS: Écris après 'Correction:', mais ne les lis pas oralement."""
 
         html_code = f"""
         <div style="background:#ffffff; padding:20px; border-radius:15px; border: 2px solid #007bff; text-align:center;">
-            <div id="status" style="margin-bottom:10px; font-weight:bold; color:red;">Micro Prêt (en attente)</div>
-            <div id="chatbox" style="height:250px; overflow-y:auto; margin-bottom:15px; font-family:sans-serif; text-align:left;"></div>
-            <button id="btn-mic" style="width:100%; padding:25px; background:#dc3545; color:white; border:none; border-radius:15px; font-weight:bold; cursor:pointer; font-size:1.3em;">🎤 CLIQUE ET PARLE</button>
+            <div id="status" style="margin-bottom:10px; font-weight:bold; color:#007bff;">Prêt à commencer</div>
+            <div id="chatbox" style="height:250px; overflow-y:auto; margin-bottom:15px; font-family:sans-serif; text-align:left; border-bottom: 1px solid #eee;"></div>
+            <button id="btn-mic" style="width:100%; padding:25px; background:#dc3545; color:white; border:none; border-radius:15px; font-weight:bold; cursor:pointer; font-size:1.3em;">🎤 CLIQUE ICI POUR COMMENCER</button>
         </div>
         <script>
             const API_KEY = "{st.secrets['OPENAI_API_KEY']}";
@@ -110,74 +111,80 @@ elif st.session_state.role == "Élève":
             }}
 
             async function callIA(txt) {{
+                status.innerText = "L'IA réfléchit...";
+                status.style.color = "orange";
+                btn.disabled = true;
+
                 if(txt) messages.push({{role: "user", content: txt}});
-                else messages.push({{role: "user", content: "Action : Lance la mission."}});
+                else messages.push({{role: "user", content: "LANCE LA MISSION MAINTENANT."}});
 
-                const r = await fetch('https://api.openai.com/v1/chat/completions', {{
-                    method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY }},
-                    body: JSON.stringify({{ model: "gpt-4o-mini", messages: messages }})
-                }});
-                const d = await r.json();
-                const reply = d.choices[0].message.content;
-                messages.push({{role: "assistant", content: reply}});
-                
-                box.innerHTML += `<p style="background:#f1f1f1; padding:10px; border-radius:10px;">IA: ${{reply.replace('Correction:', '<br><b style="color:red;">Correction:</b>')}}</p>`;
-                box.scrollTop = box.scrollHeight;
+                try {{
+                    const r = await fetch('https://api.openai.com/v1/chat/completions', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY }},
+                        body: JSON.stringify({{ model: "gpt-4o-mini", messages: messages }})
+                    }});
+                    const d = await r.json();
+                    const reply = d.choices[0].message.content;
+                    messages.push({{role: "assistant", content: reply}});
+                    
+                    box.innerHTML += `<p style="background:#f1f1f1; padding:10px; border-radius:10px;">IA: ${{reply.replace('Correction:', '<br><b style="color:red;">Correction:</b>')}}</p>`;
+                    box.scrollTop = box.scrollHeight;
 
-                synth.cancel();
-                const u = new SpeechSynthesisUtterance(reply.split('Correction:')[0]);
-                u.lang = "{tts_l}";
-                synth.speak(u);
+                    const u = new SpeechSynthesisUtterance(reply.split('Correction:')[0]);
+                    u.lang = "{tts_l}";
+                    u.onend = () => {{
+                        btn.disabled = false;
+                        btn.innerText = "🎤 CLIQUE ET RÉPONDS";
+                        btn.style.background = "#dc3545";
+                        status.innerText = "À ton tour de parler !";
+                        status.style.color = "#28a745";
+                    }};
+                    synth.speak(u);
+                }} catch (err) {{
+                    status.innerText = "Erreur de connexion IA";
+                    btn.disabled = false;
+                }}
             }}
 
             btn.onclick = async () => {{
-                synth.speak(new SpeechSynthesisUtterance("")); // Force audio wake
+                synth.cancel(); 
+                synth.speak(new SpeechSynthesisUtterance("")); // Wake up audio
                 
-                // Demande explicite de permission au premier clic
                 if (messages.length === 1) {{
+                    // Premier clic : L'IA lance la mission
+                    callIA(null);
+                }} else {{
+                    // Clics suivants : On ouvre le micro
                     try {{
-                        await navigator.mediaDevices.getUserMedia({{ audio: true }});
-                        status.innerText = "Lancement de la mission...";
-                        status.style.color = "blue";
-                        callIA(null);
-                    }} catch(e) {{
-                        status.innerText = "ERREUR : Autorise le micro dans ton navigateur !";
-                        return;
-                    }}
+                        rec.start();
+                        btn.innerText = "JE T'ÉCOUTE...";
+                        btn.style.background = "#28a745";
+                        status.innerText = "Micro activé...";
+                    }} catch(e) {{ console.log("Micro déjà actif"); }}
                 }}
-
-                try {{
-                    rec.start();
-                    btn.style.background = "#28a745";
-                    btn.innerText = "JE T'ÉCOUTE...";
-                    status.innerText = "Micro en fonction";
-                    status.style.color = "#28a745";
-                }} catch(e) {{ console.log("Déjà actif"); }}
             }};
 
             rec.onresult = (e) => {{
                 const t = e.results[0][0].transcript;
                 box.innerHTML += `<p style="text-align:right;"><b>${{t}}</b></p>`;
-                btn.style.background = "#dc3545";
-                btn.innerText = "🎤 CLIQUE ET PARLE";
                 callIA(t);
             }};
 
             rec.onerror = (err) => {{
+                status.innerText = "Problème micro. Réessaye.";
+                btn.innerText = "🎤 CLIQUE ET RÉPONDS";
                 btn.style.background = "#dc3545";
-                btn.innerText = "🎤 RÉESSAYE";
-                status.innerText = "Micro interrompu";
             }};
         </script>
         """
         st.components.v1.html(html_code, height=500)
 
-        # --- EVALUATION ---
+        # --- EVALUATION (Barème Strict Page 4 - Validé) ---
         st.divider()
-        trans = st.text_area("Copie ton dialogue ici :")
+        trans = st.text_area("Copie ton dialogue ici pour ton bilan :")
         if st.button("🏁 Générer mon Rapport Officiel"):
-            with st.spinner("Analyse..."):
+            with st.spinner("Analyse pédagogique..."):
                 eval_p = f"""Examine {user_name} (Niveau {s['level']}) via ABCD. 
                 BARÈME STRICT : $1 \\times C = 8/20$, $2 \\times C$ ou $1 \\times D = 6/20$.
                 Tutoie l'élève, sois encourageant et donne 3 pistes concrètes."""
@@ -187,4 +194,4 @@ elif st.session_state.role == "Élève":
                 st.download_button("📥 Télécharger mon PDF", pdf, f"Bilan_{user_name}.pdf")
                 m = s['teacher_email']
                 link = f"mailto:{m}?subject=Bilan%20Labo%20-%20{user_name}&body=Voici%20mon%20bilan."
-                st.markdown(f'<a href="{link}" target="_blank"><div style="background:#28a745; color:white; padding:15px; border-radius:10px; text-align:center;">📧 Envoyer au professeur ({m})</div></a>', unsafe_allow_allow_html=True)
+                st.markdown(f'<a href="{link}" target="_blank"><div style="background:#28a745; color:white; padding:15px; border-radius:10px; text-align:center;">📧 Envoyer au professeur ({m})</div></a>', unsafe_allow_html=True)
