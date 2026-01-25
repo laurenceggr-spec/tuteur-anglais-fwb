@@ -49,7 +49,7 @@ elif st.session_state.role == "Professeur":
         levels = ["Primaire (Initiation/A1)", "S1-S2 (Vers A2.1)", "S3-S4 (Vers A2.2/B1)"]
         lvl = col1.selectbox("Degré / Niveau :", levels, index=levels.index(st.session_state.class_settings["level"]))
         lang = col1.selectbox("Langue :", ["English", "Nederlands"])
-        mode = col1.selectbox("Mode d'activité :", ["Tuteur (Dialogue IA)", "Jeu de rôle", "Examen oral"])
+        mode = col1.selectbox("Mode d'activité :", ["Tuteur (Dialogue IA)", "Solo (Expression continue)", "Jeu de rôle", "Examen oral"])
         topic = col2.text_input("Sujet thématique :", value=st.session_state.class_settings["topic"])
         mail = col2.text_input("Email prof :", value=st.session_state.class_settings["teacher_email"])
         st.divider()
@@ -161,15 +161,31 @@ elif st.session_state.role == "Élève":
         st.divider()
         trans = st.text_area("Copie le dialogue pour l'évaluation :", height=150)
         if st.button("🏁 Générer mon Bilan Officiel FWB"):
-            with st.spinner("Analyse selon la Grille ABCD..."):
-                eval_prompt = f"""Tu es un examinateur officiel de la Fédération Wallonie-Bruxelles.
-                Evalue {user_name} sur ce dialogue selon les critères ABCD.
-                Niveau cible: {s['level']}. Sujet: {s['topic']}.
-                BARÈME STRICT : 1 x C = 8/20, 2 x C ou 1 x D = 6/20."""
+            with st.spinner("Analyse pédagogique selon le référentiel..."):
+                # Détection du mode pour choisir la grille SEGEC/Tronc Commun
+                est_solo = s['mode'] == "Solo (Expression continue)"
+                type_oral = "CONTINU (EOC)" if est_solo else "INTERACTION (EOI)"
+                
+                eval_prompt = f"""Tu es un expert du Tronc Commun et du SEGEC. 
+                Évalue {user_name} (Niveau: {s['level']}) pour une Expression Orale {type_oral}.
+
+                CRITÈRES SPÉCIFIQUES {type_oral} :
+                {"- Juge la capacité à produire un propos cohérent, fluide et structuré sans aide extérieure (Grille EOC)." if est_solo else "- Juge la réactivité, l'écoute et la capacité à interagir avec autrui (Grille EOI)."}
+                
+                DIRECTIVES DE BIENVEILLANCE :
+                - PRIORITÉ COMMUNICATIVE : Si le message est transmis, note > 10/20.
+                - DROIT À L'ERREUR TECHNIQUE : Ignore les erreurs de retranscription si la réponse finale est correcte.
+                - SEGEC : Valorise l'effort de production et l'autonomie.
+
+                BARÈME STRICT (Page 4) : 
+                - A/B partout : Communication réussie.
+                - 1 x C = 8/20 | 2 x C ou 1 x D = 6/20.
+
+                FORMAT : Tableau ABCD (Pertinence, Lexique, Syntaxe, Phonétique), Note sur 20, Coaching bienveillant (tu) et 2 pistes de progrès."""
                 
                 res = client.chat.completions.create(
                     model="gpt-4o-mini", 
-                    messages=[{"role": "user", "content": f"{eval_prompt} Dialogue: {trans}"}]
+                    messages=[{"role": "user", "content": f"{eval_prompt} Production de l'élève: {trans}"}]
                 )
                 bilan_final = res.choices[0].message.content
                 st.markdown(bilan_final)
