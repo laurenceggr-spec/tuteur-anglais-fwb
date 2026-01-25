@@ -8,7 +8,7 @@ from openai import OpenAI
 st.set_page_config(page_title="Language Lab FWB Pro", layout="wide")
 client = OpenAI(api_key=st.secrets.get("OPENAI_API_KEY", ""))
 
-# INITIALISATION avec gestion dynamique
+# INITIALISATION : On vérifie si les réglages existent, sinon on met les valeurs par défaut
 if "class_settings" not in st.session_state:
     st.session_state.class_settings = {
         "language": "English", 
@@ -18,7 +18,7 @@ if "class_settings" not in st.session_state:
         "session_code": "LAB2026",
         "teacher_email": "", 
         "vocab": "Apple, Banana, Milk, I like",
-        "custom_prompt": "Tu es un serveur dans un café."
+        "custom_prompt": "Fais semblant d'être un serveur dans un café."
     }
 
 def create_pdf(user_name, level, topic, evaluation_text):
@@ -35,74 +35,79 @@ def create_pdf(user_name, level, topic, evaluation_text):
     pdf.multi_cell(0, 7, txt=clean_text)
     return pdf.output(dest='S').encode('latin-1')
 
+# NAVIGATION
 if "role" not in st.session_state:
     st.title("🚀 Language Lab FWB")
     c1, c2 = st.columns(2)
     if c1.button("Accès ÉLÈVE"): st.session_state.role = "Élève"; st.rerun()
     if c2.button("Accès PROFESSEUR"): st.session_state.role = "Professeur"; st.rerun()
 
+# --- INTERFACE PROFESSEUR ---
 elif st.session_state.role == "Professeur":
     st.title("👨‍🏫 Configuration du Laboratoire")
     
-    # On utilise un formulaire mais on lie les valeurs à session_state
+    # On récupère les valeurs actuelles pour pré-remplir le formulaire
+    current = st.session_state.class_settings
+
     with st.form("config_pro"):
         col1, col2 = st.columns(2)
         levels = ["Primaire (Initiation/A1)", "S1-S2 (Vers A2.1)", "S3-S4 (Vers A2.2/B1)"]
         
-        # Ajout de 'key' pour forcer la mise à jour
-        lvl = col1.selectbox("Degré / Niveau :", levels, index=levels.index(st.session_state.class_settings["level"]))
-        lang = col1.selectbox("Langue :", ["English", "Nederlands"], index=0 if st.session_state.class_settings["language"]=="English" else 1)
-        mode = col1.selectbox("Mode d'activité :", ["Tuteur (Dialogue IA)", "Solo (Expression continue)", "Jeu de rôle", "Examen oral"], index=["Tuteur (Dialogue IA)", "Solo (Expression continue)", "Jeu de rôle", "Examen oral"].index(st.session_state.class_settings["mode"]))
+        # Formulaire avec index dynamique
+        new_lvl = col1.selectbox("Degré / Niveau :", levels, index=levels.index(current["level"]))
+        new_lang = col1.selectbox("Langue :", ["English", "Nederlands"], index=0 if current["language"]=="English" else 1)
+        modes = ["Tuteur (Dialogue IA)", "Solo (Expression continue)", "Jeu de rôle", "Examen oral"]
+        new_mode = col1.selectbox("Mode d'activité :", modes, index=modes.index(current["mode"]))
         
-        topic = col2.text_input("Thème de la séance :", value=st.session_state.class_settings["topic"])
-        sess_code = col2.text_input("Code secret session :", value=st.session_state.class_settings["session_code"])
-        mail = col2.text_input("Email enseignant :", value=st.session_state.class_settings["teacher_email"])
+        new_topic = col2.text_input("Thème de la séance :", value=current["topic"])
+        new_sess_code = col2.text_input("Code secret session :", value=current["session_code"])
+        new_mail = col2.text_input("Email enseignant :", value=current["teacher_email"])
         
         st.divider()
-        voc = st.text_area("Vocabulaire attendu :", value=st.session_state.class_settings["vocab"])
-        mission = st.text_area("🎯 MISSION DU TUTEUR :", value=st.session_state.class_settings["custom_prompt"])
+        new_voc = st.text_area("Vocabulaire attendu :", value=current["vocab"])
+        new_mission = st.text_area("🎯 MISSION DU TUTEUR :", value=current["custom_prompt"])
         
-        submitted = st.form_submit_button("✅ Enregistrer et Mettre à jour les critères")
-        if submitted:
-            st.session_state.class_settings.update({
-                "language": lang, "level": lvl, "topic": topic, "session_code": sess_code,
-                "teacher_email": mail, "vocab": voc, "custom_prompt": mission, "mode": mode
-            })
-            st.success(f"Paramètres mis à jour ! Mode actuel : {mode}")
-            st.rerun() # Force le rafraîchissement pour l'élève
+        if st.form_submit_button("✅ PUBLIER LES CHANGEMENTS"):
+            # MISE À JOUR CRITIQUE DE LA MÉMOIRE
+            st.session_state.class_settings = {
+                "language": new_lang, "level": new_lvl, "topic": new_topic, 
+                "session_code": new_sess_code, "teacher_email": new_mail, 
+                "vocab": new_voc, "custom_prompt": new_mission, "mode": new_mode
+            }
+            st.success(f"Session mise à jour sur le thème : {new_topic}")
+            st.rerun() # Recharger l'app pour valider les changements
 
     st.divider()
-    col_a, col_b = st.columns([1, 2])
-    with col_a:
-        qr = qrcode.make("https://tuteur-anglais.streamlit.app") 
-        buf = BytesIO(); qr.save(buf)
-        st.image(buf, width=150, caption="Scan QR Code")
-    with col_b:
-        st.info(f"### 🔑 Code Élève : **{st.session_state.class_settings['session_code']}**")
-        st.write(f"**Configuration active :** {st.session_state.class_settings['language']} | {st.session_state.class_settings['level']} | {st.session_state.class_settings['mode']}")
+    # Affichage récapitulatif pour être sûr que ça a marché
+    st.info(f"**Configuration active :** {st.session_state.class_settings['topic']} ({st.session_state.class_settings['language']})")
 
+# --- INTERFACE ÉLÈVE ---
 elif st.session_state.role == "Élève":
-    s = st.session_state.class_settings
+    s = st.session_state.class_settings # On utilise les réglages TOUT JUSTE mis à jour
     st.title(f"🗣️ Labo : {s['topic']}")
     
     user_name = st.sidebar.text_input("Ton Prénom :")
     input_code = st.sidebar.text_input("Code de session :")
     
     if not user_name or input_code != s['session_code']:
-        st.warning("👈 Entre ton prénom et le code de session correct.")
+        st.warning(f"👈 Entre ton prénom et le code de session donné par le prof.")
     else:
-        # Détection automatique des langues pour STT/TTS
         rec_l = "en-US" if s['language'] == "English" else "nl-BE"
         t_l = "en-US" if s['language'] == "English" else "nl-NL"
         
-        # Le prompt système est maintenant construit dynamiquement selon les choix du prof
-        adapt_prompt = f"Tu es un tuteur de {s['language']} ({s['level']}). Mode: {s['mode']}. MISSION: {s['custom_prompt']}. Vocabulaire à favoriser: {s['vocab']}. PARLE UNIQUEMENT EN {s['language']}."
+        # Construction dynamique du prompt (inclut bien le nouveau thème)
+        adapt_prompt = (
+            f"Tu es un tuteur de {s['language']} ({s['level']}). "
+            f"THÈME ACTUEL: {s['topic']}. MISSION: {s['custom_prompt']}. "
+            f"MODE: {s['mode']}. VOCABULAIRE CIBLE: {s['vocab']}. "
+            f"Parle UNIQUEMENT en {s['language']}. Sois bienveillant (Référentiel FWB)."
+        )
 
         html_code = f"""
         <div style="background:#f9f9f9; padding:15px; border-radius:10px; border:1px solid #ddd; text-align:center;">
-            <div id="status" style="color:blue; font-weight:bold; margin-bottom:10px;">Prêt (Mode: {s['mode']})</div>
-            <div id="chat" style="height:250px; overflow-y:auto; margin-bottom:10px; padding:10px; background:white; text-align:left; border:1px solid #eee;"></div>
-            <button id="go" style="width:100%; padding:20px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">🎤 CLIQUE ET PARLE</button>
+            <div id="status" style="color:blue; font-weight:bold; margin-bottom:10px;">Prêt (Sujet : {s['topic']})</div>
+            <div id="chat" style="height:250px; overflow-y:auto; margin-bottom:10px; padding:10px; background:white; text-align:left;"></div>
+            <button id="go" style="width:100%; padding:20px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold;">🎤 CLIQUE ET PARLE</button>
         </div>
         <script>
             const API_KEY = "{st.secrets['OPENAI_API_KEY']}";
@@ -117,8 +122,7 @@ elif st.session_state.role == "Élève":
             function speak(text) {{
                 synth.cancel();
                 const u = new SpeechSynthesisUtterance(text);
-                u.lang = "{t_l}";
-                u.rate = 0.9;
+                u.lang = "{t_l}"; u.rate = 0.9;
                 setTimeout(() => {{ synth.speak(u); }}, 100);
             }}
 
@@ -162,23 +166,16 @@ elif st.session_state.role == "Élève":
         trans = st.text_area("Copie le dialogue pour l'évaluation :", height=150)
         
         if st.button("🏁 Générer mon Bilan Officiel FWB"):
-            with st.spinner("Analyse pédagogique selon les critères sélectionnés..."):
+            with st.spinner("Analyse avec les nouveaux critères..."):
                 est_solo = s['mode'] == "Solo (Expression continue)"
                 t_oral = "CONTINU (EOC)" if est_solo else "INTERACTION (EOI)"
                 
-                # Le prompt d'évaluation utilise maintenant dynamiquement s['mode'] et s['level']
-                eval_p = f"""Tu es un examinateur bienveillant de la FWB (Tronc Commun). 
-                Évalue {user_name} ({s['level']}) pour une Expression Orale {t_oral}.
-                Mode sélectionné par le prof : {s['mode']}.
-                
-                CRITÈRES CE1D 2024 / TRONC COMMUN :
-                1. Compréhensibilité : Le message est-il clair malgré les erreurs ?
-                2. Pertinence : Répond-il au thème "{s['topic']}" ?
-                
-                RÈGLES DE BIENVEILLANCE :
-                - Si la communication réussit : note > 12/20.
-                - Ignore les erreurs micro/transcription.
-                - Barème strict : 1xC=8/20, 2xC/1xD=6/20."""
+                # Évaluation dynamique basée sur les réglages actuels
+                eval_p = f"""Expert FWB. Évalue {user_name} ({s['level']}) - Expression {t_oral}.
+                Thème évalué : {s['topic']}.
+                CRITÈRES : Compréhensibilité et Pertinence (CE1D 2024).
+                BIENVEILLANCE : Si communication réussie : Note > 12/20.
+                BARÈME : 1xC=8/20, 2xC/1xD=6/20."""
 
                 res = client.chat.completions.create(
                     model="gpt-4o-mini", 
