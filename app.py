@@ -8,6 +8,7 @@ from openai import OpenAI
 st.set_page_config(page_title="Language Lab FWB Pro", layout="wide")
 client = OpenAI(api_key=st.secrets.get("OPENAI_API_KEY", ""))
 
+# Initialisation robuste
 if "class_settings" not in st.session_state:
     st.session_state.class_settings = {
         "language": "English", 
@@ -45,21 +46,17 @@ if "role" not in st.session_state:
 elif st.session_state.role == "Professeur":
     st.title("👨‍🏫 Tableau de Bord Enseignant")
     
-    # --- SECTION FIXE : ACCÈS ÉLÈVES (TOUJOURS VISIBLE) ---
     col_a, col_b = st.columns([1, 2])
     with col_a:
-        # Remplacez par votre URL réelle une fois déployé
-        qr = qrcode.make("https://tuteur-anglais.streamlit.app") 
+        qr = qrcode.make("https://tuteur-anglais-fwb.streamlit.app") 
         buf = BytesIO(); qr.save(buf)
         st.image(buf, width=150, caption="Scan pour rejoindre")
     with col_b:
         st.success(f"### 🔑 CODE DE SESSION : **{st.session_state.class_settings['session_code']}**")
-        st.info(f"**Sujet actuel :** {st.session_state.class_settings['topic']} | **Mode :** {st.session_state.class_settings['mode']}")
+        st.info(f"**Sujet actif :** {st.session_state.class_settings['topic']}")
 
     st.divider()
-
-    # --- SECTION FORMULAIRE : CONFIGURATION ---
-    st.subheader("⚙️ Modifier les paramètres de la classe")
+    st.subheader("⚙️ Configuration de la séance")
     current = st.session_state.class_settings
     with st.form("config_pro"):
         col1, col2 = st.columns(2)
@@ -82,7 +79,7 @@ elif st.session_state.role == "Professeur":
                 "session_code": new_sess_code, "teacher_email": new_mail, 
                 "vocab": new_voc, "custom_prompt": new_mission, "mode": new_mode
             }
-            st.rerun() # Rafraîchit tout pour mettre à jour le QR et le Code en haut
+            st.rerun()
 
 # --- INTERFACE ÉLÈVE ---
 elif st.session_state.role == "Élève":
@@ -93,16 +90,17 @@ elif st.session_state.role == "Élève":
     input_code = st.sidebar.text_input("Code de session :")
     
     if not user_name or input_code != s['session_code']:
-        st.warning(f"👈 Entre ton prénom et le code affiché au tableau.")
+        st.warning(f"👈 Entre ton prénom et le code secret.")
     else:
         rec_l = "en-US" if s['language'] == "English" else "nl-BE"
         t_l = "en-US" if s['language'] == "English" else "nl-NL"
         
+        # Le prompt système est construit ici avec les variables mises à jour
         adapt_prompt = (
             f"Tu es un tuteur de {s['language']} ({s['level']}). "
-            f"THÈME: {s['topic']}. MISSION: {s['custom_prompt']}. "
-            f"MODE: {s['mode']}. VOCABULAIRE: {s['vocab']}. "
-            f"Parle UNIQUEMENT en {s['language']}. Sois bienveillant (Référentiel FWB)."
+            f"LE THÈME EST : {s['topic']}. TA MISSION : {s['custom_prompt']}. "
+            f"MODE : {s['mode']}. VOCABULAIRE CIBLE : {s['vocab']}. "
+            f"Parle UNIQUEMENT en {s['language']}. Sois très bienveillant (Référentiel FWB)."
         )
 
         html_code = f"""
@@ -113,7 +111,9 @@ elif st.session_state.role == "Élève":
         </div>
         <script>
             const API_KEY = "{st.secrets['OPENAI_API_KEY']}";
+            // C'est ici que l'on s'assure que msgs prend les dernières valeurs de adapt_prompt
             let msgs = [{{role: "system", content: `{adapt_prompt}`}}];
+            
             const btn = document.getElementById('go');
             const chat = document.getElementById('chat');
             const status = document.getElementById('status');
@@ -162,7 +162,8 @@ elif st.session_state.role == "Élève":
             }};
         </script>
         """
-        st.components.v1.html(html_code, height=480)
+        # La clé dynamique (key=...) force Streamlit à recréer le chat si le thème change
+        st.components.v1.html(html_code, height=480, key=f"chat_{s['topic']}_{s['mode']}")
 
         st.divider()
         trans = st.text_area("Dialogue pour l'évaluation :", height=150)
@@ -172,12 +173,11 @@ elif st.session_state.role == "Élève":
                 est_solo = s['mode'] == "Solo (Expression continue)"
                 t_oral = "CONTINU (EOC)" if est_solo else "INTERACTION (EOI)"
                 
-                eval_p = f"""Expert FWB (Tronc Commun). Évalue {user_name} ({s['level']}) - Expression {t_oral}.
-                Thème : {s['topic']}.
+                eval_p = f"""Expert FWB. Évalue {user_name} ({s['level']}) - Expression {t_oral}.
+                Thème : {s['topic']}. 
                 CRITÈRES (CE1D 2024) : Compréhensibilité et Pertinence.
                 BIENVEILLANCE : Si communication réussie : Note > 12/20.
-                BARÈME : 1xC=8/20, 2xC/1xD=6/20.
-                Affiche le tableau ABCD et un feedback."""
+                BARÈME : 1xC=8/20, 2xC/1xD=6/20."""
 
                 res = client.chat.completions.create(
                     model="gpt-4o-mini", 
