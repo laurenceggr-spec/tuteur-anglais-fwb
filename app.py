@@ -86,64 +86,79 @@ elif st.session_state.role == "Élève":
         Si Niveau Primaire: phrases très courtes.
         CORRECTIONS: Toujours après 'Correction:' en français."""
 
-        html_code = f"""
-        <div style="background:#f9f9f9; padding:15px; border-radius:10px; border:1px solid #ddd; text-align:center;">
-            <div id="status" style="color:blue; font-weight:bold; margin-bottom:10px;">Système Prêt</div>
-            <div id="chat" style="height:250px; overflow-y:auto; margin-bottom:10px; padding:10px; background:white; text-align:left; border:1px solid #eee;"></div>
-            <button id="go" style="width:100%; padding:20px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">🎤 CLIQUE ET PARLE</button>
-        </div>
-        <script>
-            const API_KEY = "{st.secrets['OPENAI_API_KEY']}";
-            let msgs = [{{role: "system", content: `{adapt_prompt}`}}];
-            const btn = document.getElementById('go');
-            const chat = document.getElementById('chat');
-            const status = document.getElementById('status');
-            const synth = window.speechSynthesis;
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-            rec.lang = "{rec_l}";
+<script>
+    const API_KEY = "{st.secrets['OPENAI_API_KEY']}";
+    let msgs = [{role: "system", content: `{adapt_prompt}`}];
+    const btn = document.getElementById('go');
+    const chat = document.getElementById('chat');
+    const status = document.getElementById('status');
+    const synth = window.speechSynthesis;
+    const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    rec.lang = "{rec_l}";
 
-            async function talk(txt) {{
-                if (audioCtx.state === 'suspended') {{ audioCtx.resume(); }}
-                status.innerText = "L'IA réfléchit...";
-                if(txt) msgs.push({{role: "user", content: txt}});
-                else msgs.push({{role: "user", content: "LANCE LA MISSION EN {s['language']}."}});
-                
-                try {{
-                    const r = await fetch('https://api.openai.com/v1/chat/completions', {{
-                        method: 'POST',
-                        headers: {{ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY }},
-                        body: JSON.stringify({{ model: "gpt-4o-mini", messages: msgs }})
-                    }});
-                    const d = await r.json();
-                    const reply = d.choices[0].message.content;
-                    msgs.push({{role: "assistant", content: reply}});
-                    chat.innerHTML += `<p><b>Tuteur:</b> ${{reply.replace('Correction:', '<br><small style="color:red;">Correction:</small>')}}</p>`;
-                    chat.scrollTop = chat.scrollHeight;
-                    
-                    synth.cancel();
-                    const u = new SpeechSynthesisUtterance(reply.split('Correction:')[0]);
-                    u.lang = "{tts_l}";
-                    u.onend = () => {{ status.innerText = "À toi !"; }};
-                    setTimeout(() => {{ synth.speak(u); }}, 100);
-                }} catch(e) {{ status.innerText = "Erreur de connexion."; }}
-            }}
+    // Fonction de parole renforcée
+    function speakText(text) {
+        synth.cancel(); // Arrête tout son en cours
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "{tts_l}";
+        utterance.rate = 0.9;
+        
+        // RECOURS : Si la voix ne sort pas, on force le démarrage
+        setTimeout(() => {
+            synth.speak(utterance);
+        }, 150);
+    }
 
-            btn.onclick = () => {{
-                if (audioCtx.state === 'suspended') {{ audioCtx.resume(); }}
-                if(msgs.length === 1) talk(null);
-                else {{ 
-                    try {{ rec.start(); status.innerText = "Écoute..."; }} 
-                    catch(e) {{ console.log("Déjà actif"); }}
-                }}
-            }};
+    async function talk(txt) {
+        status.innerText = "L'IA réfléchit...";
+        if(txt) msgs.push({role: "user", content: txt});
+        else msgs.push({role: "user", content: "LANCE LA MISSION EN {s['language']}."});
+        
+        try {
+            const r = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
+                body: JSON.stringify({ model: "gpt-4o-mini", messages: msgs })
+            });
+            const d = await r.json();
+            const reply = d.choices[0].message.content;
+            msgs.push({role: "assistant", content: reply});
+            
+            chat.innerHTML += `<p><b>Tuteur:</b> ${reply.replace('Correction:', '<br><small style="color:red;">Correction:</small>')}</p>`;
+            chat.scrollTop = chat.scrollHeight;
+            
+            // On extrait le texte avant "Correction:" pour la voix
+            const cleanReply = reply.split('Correction:')[0];
+            speakText(cleanReply);
+            
+            status.innerText = "À toi !";
+            btn.innerText = "🎤 CLIQUE ET RÉPONDS";
+        } catch(e) { status.innerText = "Erreur IA."; }
+    }
 
-            rec.onresult = (e) => {{
-                const t = e.results[0][0].transcript;
-                chat.innerHTML += `<p style="text-align:right;"><b>Moi:</b> ${{t}}</p>`;
-                talk(t);
-            }};
-        </script>
+    btn.onclick = () => {
+        // ACTION CRITIQUE : Débloque l'audio sur Chrome/Safari
+        const unlock = new SpeechSynthesisUtterance("");
+        synth.speak(unlock);
+
+        if(msgs.length === 1) {
+            btn.innerText = "Lancement...";
+            talk(null);
+        } else { 
+            try { 
+                rec.start(); 
+                status.innerText = "Écoute en cours..."; 
+                btn.innerText = "JE T'ÉCOUTE...";
+            } catch(e) { console.log("Micro déjà actif"); }
+        }
+    };
+
+    rec.onresult = (e) => {
+        const t = e.results[0][0].transcript;
+        chat.innerHTML += `<p style="text-align:right; color:blue;"><b>Moi:</b> ${t}</p>`;
+        talk(t);
+    };
+</script>
         """
         st.components.v1.html(html_code, height=480)
 
