@@ -87,7 +87,7 @@ elif st.session_state.role == "Professeur":
         st.subheader("📲 Accès Élèves")
         cA, cB = st.columns([1, 2])
         with cA:
-            qr = qrcode.make("https://votre-app.streamlit.app")
+            qr = qrcode.make("https://tuteur-anglais.streamlit.app/")
             buf = BytesIO(); qr.save(buf); st.image(buf, width=200)
         with cB:
             st.metric("CODE SESSION", st.session_state.class_settings["session_code"])
