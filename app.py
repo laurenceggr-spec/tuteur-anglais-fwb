@@ -51,33 +51,52 @@ elif st.session_state.role == "Professeur":
         lang = col1.selectbox("Langue :", ["English", "Nederlands"])
         mode = col1.selectbox("Mode d'activité :", ["Tuteur (Dialogue IA)", "Solo (Expression continue)", "Jeu de rôle", "Examen oral"])
         topic = col2.text_input("Sujet thématique :", value=st.session_state.class_settings["topic"])
+        topic = col2.text_input("Sujet thématique :", value=st.session_state.class_settings["topic"])
+        # AJOUTER CETTE LIGNE ICI :
+        sess_code = col2.text_input("Code de session (ex: ANGLAIS1) :", value=st.session_state.class_settings.get("session_code", "LAB2026"))
+        mail = col2.text_input("Email prof :", value=st.session_state.class_settings["teacher_email"])
         mail = col2.text_input("Email prof :", value=st.session_state.class_settings["teacher_email"])
         st.divider()
         voc = st.text_area("Attendus spécifiques :", value=st.session_state.class_settings["vocab"])
         mission = st.text_area("🎯 MISSION DU TUTEUR :", value=st.session_state.class_settings["custom_prompt"])
         
         if st.form_submit_button("✅ Enregistrer et Publier"):
+            # Ici, on dit à l'application de mettre en mémoire toutes les cases du formulaire
             st.session_state.class_settings.update({
-                "language": lang, "level": lvl, "topic": topic, 
-                "teacher_email": mail, "vocab": voc, "custom_prompt": mission, "mode": mode
+                "language": lang, 
+                "level": lvl, 
+                "topic": topic, 
+                "session_code": sess_code, # C'est cette ligne qui permet de retenir le code
+                "teacher_email": mail, 
+                "vocab": voc, 
+                "custom_prompt": mission, 
+                "mode": mode
             })
-            st.success("Configuration enregistrée.")
+            st.success("Session configurée avec le code : " + sess_code)
 
     st.divider()
-    st.subheader("🔗 Partage")
-    qr = qrcode.make("https://tuteur-anglais.streamlit.app") 
-    buf = BytesIO(); qr.save(buf)
-    st.image(buf, width=150, caption="QR Code Elève")
-
+    col_a, col_b = st.columns([1, 2])
+    with col_a:
+        qr = qrcode.make("https://votre-url-app.streamlit.app") # Votre URL
+        buf = BytesIO(); qr.save(buf)
+        st.image(buf, width=150, caption="Scan pour accès direct")
+    with col_b:
+        st.info(f"### 🔑 Code de session : **{st.session_state.class_settings['session_code']}**")
+        st.write("À donner aux élèves qui ne peuvent pas scanner.")
 # --- INTERFACE ÉLÈVE ---
 elif st.session_state.role == "Élève":
     s = st.session_state.class_settings
     st.title(f"🗣️ {s['topic']}")
     user_name = st.sidebar.text_input("Ton Prénom :")
+    # AJOUTER CETTE LIGNE :
+    input_code = st.sidebar.text_input("Code de session :")
     
-    if not user_name:
-        st.info("👈 Entre ton prénom pour commencer.")
+    if not user_name or input_code != s['session_code']:
+        if input_code and input_code != s['session_code']:
+            st.sidebar.error("Code de session incorrect.")
+        st.warning("👈 Entre ton prénom et le code de session pour débloquer le micro.")
     else:
+        # Le reste du code (micro, IA, etc.) commence ici
         rec_l = "en-US" if s['language'] == "English" else "nl-BE"
         tts_l = "en-US" if s['language'] == "English" else "nl-NL"
         
