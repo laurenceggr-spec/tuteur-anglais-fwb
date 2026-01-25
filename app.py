@@ -83,82 +83,77 @@ elif st.session_state.role == "Élève":
         
         adapt_prompt = f"""Tu es un tuteur de {s['language']} (Niveau {s['level']}). 
         MISSION: {s['custom_prompt']}. PARLE UNIQUEMENT EN {s['language']}.
-        Si Niveau Primaire: phrases très courtes.
-        CORRECTIONS: Toujours après 'Correction:' en français."""
+        Si Niveau Primaire: phrases tres courtes.
+        CORRECTIONS: Toujours apres 'Correction:' en francais."""
 
-<script>
-    const API_KEY = "{st.secrets['OPENAI_API_KEY']}";
-    let msgs = [{role: "system", content: `{adapt_prompt}`}];
-    const btn = document.getElementById('go');
-    const chat = document.getElementById('chat');
-    const status = document.getElementById('status');
-    const synth = window.speechSynthesis;
-    const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    rec.lang = "{rec_l}";
+        html_code = f"""
+        <div style="background:#f9f9f9; padding:15px; border-radius:10px; border:1px solid #ddd; text-align:center;">
+            <div id="status" style="color:blue; font-weight:bold; margin-bottom:10px;">Systeme Pret</div>
+            <div id="chat" style="height:250px; overflow-y:auto; margin-bottom:10px; padding:10px; background:white; text-align:left; border:1px solid #eee;"></div>
+            <button id="go" style="width:100%; padding:20px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">🎤 CLIQUE ET PARLE</button>
+        </div>
+        <script>
+            const API_KEY = "{st.secrets['OPENAI_API_KEY']}";
+            let msgs = [{{role: "system", content: `{adapt_prompt}`}}];
+            const btn = document.getElementById('go');
+            const chat = document.getElementById('chat');
+            const status = document.getElementById('status');
+            const synth = window.speechSynthesis;
+            const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            rec.lang = "{rec_l}";
 
-    // Fonction de parole renforcée
-    function speakText(text) {
-        synth.cancel(); // Arrête tout son en cours
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = "{tts_l}";
-        utterance.rate = 0.9;
-        
-        // RECOURS : Si la voix ne sort pas, on force le démarrage
-        setTimeout(() => {
-            synth.speak(utterance);
-        }, 150);
-    }
+            function speakText(text) {{
+                synth.cancel();
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = "{tts_l}";
+                u.rate = 0.9;
+                setTimeout(() => {{ synth.speak(u); }}, 100);
+            }}
 
-    async function talk(txt) {
-        status.innerText = "L'IA réfléchit...";
-        if(txt) msgs.push({role: "user", content: txt});
-        else msgs.push({role: "user", content: "LANCE LA MISSION EN {s['language']}."});
-        
-        try {
-            const r = await fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
-                body: JSON.stringify({ model: "gpt-4o-mini", messages: msgs })
-            });
-            const d = await r.json();
-            const reply = d.choices[0].message.content;
-            msgs.push({role: "assistant", content: reply});
-            
-            chat.innerHTML += `<p><b>Tuteur:</b> ${reply.replace('Correction:', '<br><small style="color:red;">Correction:</small>')}</p>`;
-            chat.scrollTop = chat.scrollHeight;
-            
-            // On extrait le texte avant "Correction:" pour la voix
-            const cleanReply = reply.split('Correction:')[0];
-            speakText(cleanReply);
-            
-            status.innerText = "À toi !";
-            btn.innerText = "🎤 CLIQUE ET RÉPONDS";
-        } catch(e) { status.innerText = "Erreur IA."; }
-    }
+            async function talk(txt) {{
+                status.innerText = "L'IA reflechit...";
+                if(txt) msgs.push({{role: "user", content: txt}});
+                else msgs.push({{role: "user", content: "LANCE LA MISSION."}});
+                
+                try {{
+                    const r = await fetch('https://api.openai.com/v1/chat/completions', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY }},
+                        body: JSON.stringify({{ model: "gpt-4o-mini", messages: msgs }})
+                    }});
+                    const d = await r.json();
+                    const reply = d.choices[0].message.content;
+                    msgs.push({{role: "assistant", content: reply}});
+                    chat.innerHTML += `<p><b>Tuteur:</b> ${{reply.replace('Correction:', '<br><small style="color:red;">Correction:</small>')}}</p>`;
+                    chat.scrollTop = chat.scrollHeight;
+                    
+                    const cleanReply = reply.split('Correction:')[0];
+                    speakText(cleanReply);
+                    
+                    status.innerText = "A toi !";
+                    btn.innerText = "🎤 CLIQUE ET REPONDS";
+                }} catch(e) {{ status.innerText = "Erreur IA."; }}
+            }}
 
-    btn.onclick = () => {
-        // ACTION CRITIQUE : Débloque l'audio sur Chrome/Safari
-        const unlock = new SpeechSynthesisUtterance("");
-        synth.speak(unlock);
+            btn.onclick = () => {{
+                // Deblocage audio forcé
+                const unlock = new SpeechSynthesisUtterance("");
+                synth.speak(unlock);
 
-        if(msgs.length === 1) {
-            btn.innerText = "Lancement...";
-            talk(null);
-        } else { 
-            try { 
-                rec.start(); 
-                status.innerText = "Écoute en cours..."; 
-                btn.innerText = "JE T'ÉCOUTE...";
-            } catch(e) { console.log("Micro déjà actif"); }
-        }
-    };
+                if(msgs.length === 1) {{
+                    talk(null);
+                }} else {{ 
+                    try {{ rec.start(); status.innerText = "Ecoute..."; }} 
+                    catch(e) {{ console.log("Micro actif"); }}
+                }}
+            }};
 
-    rec.onresult = (e) => {
-        const t = e.results[0][0].transcript;
-        chat.innerHTML += `<p style="text-align:right; color:blue;"><b>Moi:</b> ${t}</p>`;
-        talk(t);
-    };
-</script>
+            rec.onresult = (e) => {{
+                const t = e.results[0][0].transcript;
+                chat.innerHTML += `<p style="text-align:right; color:blue;"><b>Moi:</b> ${{t}}</p>`;
+                talk(t);
+            }};
+        </script>
         """
         st.components.v1.html(html_code, height=480)
 
@@ -168,20 +163,9 @@ elif st.session_state.role == "Élève":
         if st.button("🏁 Générer mon Bilan Officiel FWB"):
             with st.spinner("Analyse selon la Grille ABCD..."):
                 eval_prompt = f"""Tu es un examinateur officiel de la Fédération Wallonie-Bruxelles.
-                Evalue {user_name} sur ce dialogue selon les critères ABCD du document fourni.
+                Evalue {user_name} sur ce dialogue selon les critères ABCD.
                 Niveau cible: {s['level']}. Sujet: {s['topic']}.
-                
-                BARÈME MATHÉMATIQUE STRICT (Page 4) :
-                - Si A ou B partout : Note sur 20 (>=10/20).
-                - 1 x C = 8/20.
-                - 2 x C ou 1 x D = 6/20.
-                - 3 x C ou 2 x D = 4/20.
-                
-                TON BILAN DOIT CONTENIR :
-                1. Un tableau ABCD pour les 4 critères.
-                2. La note sur 20 justifiée par le barème ci-dessus.
-                3. Un coaching bienveillant (tutoie l'élève).
-                4. 3 pistes de progrès."""
+                BARÈME STRICT : 1 x C = 8/20, 2 x C ou 1 x D = 6/20."""
                 
                 res = client.chat.completions.create(
                     model="gpt-4o-mini", 
@@ -189,10 +173,5 @@ elif st.session_state.role == "Élève":
                 )
                 bilan_final = res.choices[0].message.content
                 st.markdown(bilan_final)
-                
                 pdf = create_pdf(user_name, s['level'], s['topic'], bilan_final)
                 st.download_button("📥 Télécharger mon PDF", pdf, f"Bilan_{user_name}.pdf")
-                
-                m = s['teacher_email']
-                link = f"mailto:{m}?subject=Bilan%20FWB%20{user_name}"
-                st.markdown(f'<a href="{link}" target="_blank"><div style="background:#28a745; color:white; padding:15px; border-radius:10px; text-align:center;">📧 Envoyer au professeur</div></a>', unsafe_allow_html=True)
