@@ -11,7 +11,6 @@ import urllib.parse
 st.set_page_config(page_title="Language Lab FWB Pro", layout="wide")
 client = OpenAI(api_key=st.secrets.get("OPENAI_API_KEY", ""))
 
-# Initialisation avec mission type
 if "class_settings" not in st.session_state:
     st.session_state.class_settings = {
         "language": "English", 
@@ -63,14 +62,10 @@ elif st.session_state.role == "Professeur":
         st.divider()
         voc = st.text_area("Attendus spécifiques (Lexique/Grammaire) :", value=st.session_state.class_settings["vocab"])
         mission = st.text_area("🎯 MISSION DU TUTEUR (L'IA l'utilisera pour lancer le dialogue) :", 
-                               value=st.session_state.class_settings["custom_prompt"],
-                               help="Exemple : Demande à l'élève ce qu'il a fait hier / Joue le rôle d'un client perdu...")
+                               value=st.session_state.class_settings["custom_prompt"])
         
         if st.form_submit_button("✅ Enregistrer et Publier"):
-            st.session_state.class_settings.update({
-                "language": lang, "level": lvl, "topic": topic, 
-                "teacher_email": mail, "vocab": voc, "custom_prompt": mission
-            })
+            st.session_state.class_settings.update({"language": lang, "level": lvl, "topic": topic, "teacher_email": mail, "vocab": voc, "custom_prompt": mission})
             st.success(f"Session publiée : Niveau {lvl}")
             st.rerun()
     st.divider()
@@ -83,26 +78,25 @@ elif st.session_state.role == "Élève":
     user_name = st.sidebar.text_input("Ton Prénom :")
     
     if not user_name:
-        st.info("👈 Entre ton prénom pour commencer l'immersion.")
+        st.info("👈 Entre ton prénom pour commencer.")
     else:
         st.title(f"🗣️ Sujet : {s['topic']}")
-        st.write(f"Niveau : **{s['level']}**")
-
+        
         rec_l = "en-US" if s['language'] == "English" else "nl-BE"
         tts_l = "en-US" if s['language'] == "English" else "nl-NL"
         
         adapt_prompt = f"""Tu es un tuteur de {s['language']} niveau {s['level']}. 
-        MISSION ACTUELLE: {s['custom_prompt']}. 
-        RÈGLE D'OR: Ne perds pas de temps. Utilise ta MISSION pour poser la toute première question sur le sujet {s['topic']}.
-        Si Niveau=Primaire: phrases ultra-courtes (max 3-4 mots).
+        MISSION: {s['custom_prompt']}. 
+        RÈGLE: Utilise ta MISSION pour poser une question TRÈS COURTE sur {s['topic']}.
+        Si Niveau=Primaire: phrases de 3-4 mots max.
         CORRECTIONS: Écris après 'Correction:', mais ne les lis pas oralement."""
 
         html_code = f"""
         <div style="background:#ffffff; padding:20px; border-radius:15px; border: 2px solid #007bff;">
-            <div id="chatbox" style="height:250px; overflow-y:auto; margin-bottom:15px; font-family:sans-serif;">
-                <p style="color:gray;"><i>L'IA connaît ta mission... clique sur le micro pour commencer !</i></p>
+            <div id="chatbox" style="height:250px; overflow-y:auto; margin-bottom:15px; font-family:sans-serif; border-bottom:1px solid #eee;">
+                <p style="color:blue;"><b>Système:</b> Clique sur le micro pour que l'IA te parle !</p>
             </div>
-            <button id="btn-mic" style="width:100%; padding:15px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">🎤 CLIQUE ET PARLE</button>
+            <button id="btn-mic" style="width:100%; padding:20px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer; font-size:1.2em;">🎤 CLIQUE ET PARLE</button>
         </div>
         <script>
             const API_KEY = "{st.secrets['OPENAI_API_KEY']}";
@@ -112,18 +106,12 @@ elif st.session_state.role == "Élève":
             const synth = window.speechSynthesis;
             const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
             rec.lang = "{rec_l}";
+            rec.continuous = false;
+            rec.interimResults = false;
 
-            btn.onclick = () => {{ 
-                synth.speak(new SpeechSynthesisUtterance("")); 
-                rec.start(); 
-                btn.style.background = "#28a745"; 
-            }};
-
-            rec.onresult = async (e) => {{
-                const text = e.results[0][0].transcript;
-                btn.style.background = "#dc3545";
-                box.innerHTML += `<p style="text-align:right;"><b>${{text}}</b></p>`;
-                messages.push({{role: "user", content: text}});
+            async function askIA(userInput) {{
+                if(userInput) messages.push({{role: "user", content: userInput}});
+                else messages.push({{role: "user", content: "Lance la mission stp."}});
 
                 const r = await fetch('https://api.openai.com/v1/chat/completions', {{
                     method: 'POST',
@@ -133,37 +121,57 @@ elif st.session_state.role == "Élève":
                 const d = await r.json();
                 const reply = d.choices[0].message.content;
                 messages.push({{role: "assistant", content: reply}});
-                box.innerHTML += `<p style="text-align:left; background:#f1f1f1; padding:10px; border-radius:10px;">${{reply.replace('Correction:', '<br><i style="color:red;">Correction:</i>')}}</p>`;
+                
+                box.innerHTML += `<p style="text-align:left; background:#f1f1f1; padding:10px; border-radius:10px; margin:5px 0;">IA: ${{reply.replace('Correction:', '<br><i style="color:red;">Correction:</i>')}}</p>`;
                 box.scrollTop = box.scrollHeight;
 
                 synth.cancel();
                 const u = new SpeechSynthesisUtterance(reply.split('Correction:')[0]);
                 u.lang = "{tts_l}";
                 synth.speak(u);
+            }}
+
+            btn.onclick = () => {{
+                synth.speak(new SpeechSynthesisUtterance("")); // Débloque l'audio
+                btn.style.background = "#28a745";
+                btn.innerText = "ÉCOUTE EN COURS...";
+                try {{
+                    rec.start();
+                }} catch(e) {{
+                    console.log("Re-clic");
+                }}
+            }};
+
+            rec.onresult = (e) => {{
+                const text = e.results[0][0].transcript;
+                box.innerHTML += `<p style="text-align:right; margin:5px 0;"><b>${{text}}</b></p>`;
+                btn.style.background = "#dc3545";
+                btn.innerText = "🎤 CLIQUE ET PARLE";
+                askIA(text);
+            }};
+
+            rec.onerror = (err) => {{
+                btn.style.background = "#dc3545";
+                btn.innerText = "🎤 ERREUR MICRO (Réessaye)";
+                // Si c'est le premier clic et que ça rate, on lance quand même l'IA
+                if(messages.length === 1) askIA(null);
             }};
         </script>
         """
-        st.components.v1.html(html_code, height=400)
+        st.components.v1.html(html_code, height=450)
 
-        # --- EVALUATION (BARÈME STRICT PAGE 4) ---
+        # --- EVALUATION ---
         st.divider()
         transcription = st.text_area("Copie ton dialogue ici pour le bilan :")
         if st.button("🏁 Générer mon Bilan Officiel"):
-            with st.spinner("Analyse du respect du Référentiel..."):
-                eval_p = f"""Tu es un examinateur FWB. Tutoie l'élève de niveau {s['level']}.
-                Applique la grille ABCD. 
-                BARÈME MATHÉMATIQUE STRICT (Page 4) :
-                - Si A ou B partout : Cote entre $10/20$ et $20/20$.
-                - $1 \\times C$ (un seul critère) = $8/20$
-                - $2 \\times C$ OU $1 \\times D$ = $6/20$
-                - $3 \\times C$ OU $2 \\times D$ = $4/20$
-                Ton ton doit être juste et encourageant. Propose 3 pistes d'amélioration."""
-                
+            with st.spinner("Analyse..."):
+                eval_p = f"""Tu es un examinateur FWB. Tutoie l'élève (Niveau {s['level']}).
+                Applique ABCD. BARÈME STRICT : $1 \\times C = 8/20$, $2 \\times C$ ou $1 \\times D = 6/20$.
+                Sois encourageant."""
                 res = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": f"{eval_p} Dialogue: {transcription}"}])
                 bilan = res.choices[0].message.content
                 pdf = create_pdf(user_name, s['level'], s['topic'], bilan)
-                st.download_button("📥 Télécharger mon Bilan PDF", pdf, f"Bilan_{user_name}.pdf")
-                
+                st.download_button("📥 Télécharger le PDF", pdf, f"Bilan_{user_name}.pdf")
                 m = s['teacher_email']
-                link = f"mailto:{m}?subject=Bilan%20Labo%20-%20{user_name}&body=Voici%20mon%20bilan."
-                st.markdown(f'<a href="{link}" target="_blank"><div style="background:#28a745; color:white; padding:15px; border-radius:10px; text-align:center; font-weight:bold;">📧 Envoyer au professeur ({m})</div></a>', unsafe_allow_html=True)
+                link = f"mailto:{m}?subject=Bilan%20{user_name}&body=Mon%20bilan%20en%20annexe."
+                st.markdown(f'<a href="{link}" target="_blank"><div style="background:#28a745; color:white; padding:15px; border-radius:10px; text-align:center;">📧 Envoyer au professeur ({m})</div></a>', unsafe_allow_html=True)
