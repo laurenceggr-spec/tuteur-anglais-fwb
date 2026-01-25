@@ -154,7 +154,7 @@ elif st.session_state.role == "Élève":
             
             if st.button("🏁 Générer mon Bilan & Envoyer au Prof"):
                 with st.spinner("Analyse selon les référentiels FWB..."):
-                    prompt_eval = f"""Evalue cette session au TU. Elève: {user_name}, Niveau: {s['level']}.
+                    prompt_eval = f"""Evalue cette session . Elève: {user_name}, Niveau: {s['level']}.
                     Analyse cet historique: {transcription}.
                     Note sur 5 (Critères FWB) : 1. Intention, 2. Lexique ({s['vocab']}), 3. Grammaire, 4. Aisance.
                     Sois juste et encourageant."""
