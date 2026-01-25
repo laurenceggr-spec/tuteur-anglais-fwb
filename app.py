@@ -30,6 +30,7 @@ def create_pdf(user_name, level, topic, evaluation_text):
     pdf.cell(200, 8, txt=f"Eleve : {user_name} | Niveau : {level} | Sujet : {topic}", ln=True)
     pdf.ln(5)
     pdf.set_font("Arial", size=10)
+    # Nettoyage pour éviter les erreurs d'encodage PDF
     clean_text = evaluation_text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 7, txt=clean_text)
     return pdf.output(dest='S').encode('latin-1')
@@ -92,8 +93,8 @@ elif st.session_state.role == "Élève":
         html_code = f"""
         <div style="background:#f9f9f9; padding:15px; border-radius:10px; border:1px solid #ddd; text-align:center;">
             <div id="status" style="color:blue; font-weight:bold; margin-bottom:10px;">Pret</div>
-            <div id="chat" style="height:250px; overflow-y:auto; margin-bottom:10px; padding:10px; background:white; text-align:left;"></div>
-            <button id="go" style="width:100%; padding:20px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold;">🎤 CLIQUE ET PARLE</button>
+            <div id="chat" style="height:250px; overflow-y:auto; margin-bottom:10px; padding:10px; background:white; text-align:left; border:1px solid #eee;"></div>
+            <button id="go" style="width:100%; padding:20px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">🎤 CLIQUE ET PARLE</button>
         </div>
         <script>
             const API_KEY = "{st.secrets['OPENAI_API_KEY']}";
@@ -114,7 +115,7 @@ elif st.session_state.role == "Élève":
             }}
 
             async function talk(txt) {{
-                status.innerText = "L'IA reflechit...";
+                status.innerText = "L'IA réfléchit...";
                 if(txt) msgs.push({{role: "user", content: txt}});
                 else msgs.push({{role: "user", content: "START MISSION."}});
                 try {{
@@ -129,7 +130,7 @@ elif st.session_state.role == "Élève":
                     chat.innerHTML += `<p><b>Tuteur:</b> ${{reply.replace('Correction:', '<br><small style="color:red;">Correction:</small>')}}</p>`;
                     chat.scrollTop = chat.scrollHeight;
                     speak(reply.split('Correction:')[0]);
-                    status.innerText = "A toi !";
+                    status.innerText = "À toi !";
                 }} catch(e) {{ status.innerText = "Erreur IA."; }}
             }}
 
@@ -137,7 +138,7 @@ elif st.session_state.role == "Élève":
                 const unlock = new SpeechSynthesisUtterance("");
                 synth.speak(unlock);
                 if(msgs.length === 1) talk(null);
-                else {{ try {{ rec.start(); status.innerText = "Ecoute..."; }} catch(e) {{}} }}
+                else {{ try {{ rec.start(); status.innerText = "Écoute..."; }} catch(e) {{}} }}
             }};
 
             rec.onresult = (e) => {{
@@ -152,11 +153,34 @@ elif st.session_state.role == "Élève":
         st.divider()
         trans = st.text_area("Copie le dialogue pour l'évaluation :", height=150)
         if st.button("🏁 Générer mon Bilan Officiel FWB"):
-            with st.spinner("Analyse SEGEC / Tronc Commun..."):
+            with st.spinner("Analyse pédagogique (Tronc Commun & CE1D)..."):
                 est_solo = s['mode'] == "Solo (Expression continue)"
                 t_oral = "CONTINU (EOC)" if est_solo else "INTERACTION (EOI)"
-                eval_p = f"Expert Tronc Commun & SEGEC. Evalue {user_name} ({s['level']}) pour Expression Orale {t_oral}. BIENVEILLANCE: Note > 10/20 si communication reussie (ignore erreurs micro). Bareme Page 4: 1xC=8/20, 2xC=6/20."
-                res = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": f"{eval_p} Texte: {trans}"}])
+                
+                # Prompt d'évaluation ajusté sur vos documents
+                eval_p = f"""Tu es un examinateur bienveillant de la FWB (Référentiel Tronc Commun & CE1D). 
+                Évalue {user_name} ({s['level']}) pour une Expression Orale {t_oral}.
+                
+                CRITÈRES INCONTOURNABLES :
+                1. Compréhensibilité : Le message est-il clair pour un interlocuteur bienveillant ?
+                2. Pertinence : Les informations sont-elles en lien avec le thème "{s['topic']}" ?
+                
+                RÈGLES DE BIENVEILLANCE :
+                - Si la tâche est accomplie, la note doit être de minimum 12/20.
+                - Ignore les erreurs de syntaxe élémentaires si elles n'entravent pas le sens.
+                - Valorise l'utilisation du vocabulaire cible : {s['vocab']}.
+                
+                BARÈME STRICT (Page 4) :
+                - 1 x C (Lacune majeure bloquante) = 8/20.
+                - 2 x C ou 1 x D = 6/20.
+                - Sinon (A/B), privilégie une note entre 14 et 18/20.
+                
+                Affiche un tableau ABCD clair et un feedback encourageant."""
+
+                res = client.chat.completions.create(
+                    model="gpt-4o-mini", 
+                    messages=[{"role": "user", "content": f"{eval_p}\n\nTexte à évaluer: {trans}"}]
+                )
                 bilan_final = res.choices[0].message.content
                 st.markdown(bilan_final)
                 pdf = create_pdf(user_name, s['level'], s['topic'], bilan_final)
