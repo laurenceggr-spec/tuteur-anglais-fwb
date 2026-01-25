@@ -19,16 +19,18 @@ if "class_settings" not in st.session_state:
         "custom_prompt": "Fais semblant d'être un serveur dans un café."
     }
 
-# --- FONCTION PDF (Barème Strict Page 4 - Validé) ---
+# --- FONCTION PDF (CONFORME PAGE 4 - GRILLE ABCD) ---
 def create_pdf(user_name, level, topic, evaluation_text):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(200, 10, txt="Bilan d'Evaluation Officiel - FWB", ln=True, align='C')
     pdf.ln(10)
-    pdf.set_font("Arial", size=11)
-    pdf.cell(200, 8, txt=f"Eleve : {user_name} | Niveau : {level}", ln=True)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(200, 8, txt=f"Eleve : {user_name} | Niveau : {level} | Sujet : {topic}", ln=True)
     pdf.ln(5)
+    pdf.set_font("Arial", size=10)
+    # Nettoyage pour format PDF
     clean_text = evaluation_text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 7, txt=clean_text)
     return pdf.output(dest='S').encode('latin-1')
@@ -60,40 +62,38 @@ elif st.session_state.role == "Professeur":
                 "language": lang, "level": lvl, "topic": topic, 
                 "teacher_email": mail, "vocab": voc, "custom_prompt": mission, "mode": mode
             })
-            st.success("Session configurée avec succès !")
+            st.success("Configuration enregistrée.")
 
     st.divider()
-    st.subheader("🔗 Partage avec les élèves")
-    qr = qrcode.make("https://votre-app.streamlit.app") # Remplacez par votre URL réelle
-    buf = BytesIO()
-    qr.save(buf)
-    st.image(buf, width=200, caption="Scanner pour accéder au labo")
+    st.subheader("🔗 Partage")
+    qr = qrcode.make("https://votre-app.streamlit.app") 
+    buf = BytesIO(); qr.save(buf)
+    st.image(buf, width=150, caption="QR Code Elève")
 
-# --- INTERFACE ÉLÈVE (Correction Langue Forcée) ---
+# --- INTERFACE ÉLÈVE ---
 elif st.session_state.role == "Élève":
     s = st.session_state.class_settings
     st.title(f"🗣️ {s['topic']}")
     user_name = st.sidebar.text_input("Ton Prénom :")
     
     if not user_name:
-        st.warning("👈 Entre ton prénom pour activer le micro.")
+        st.info("👈 Entre ton prénom pour commencer.")
     else:
+        # Langues micro et synthèse
         rec_l = "en-US" if s['language'] == "English" else "nl-BE"
         tts_l = "en-US" if s['language'] == "English" else "nl-NL"
         
-        # PROMPT RENFORCÉ : Interdiction stricte du français dans le dialogue
-        adapt_prompt = f"""Tu es un tuteur de {s['language']} (Niveau {s['level']}).
-        MISSION: {s['custom_prompt']}.
-        RÈGLE ABSOLUE: Tu dois parler UNIQUEMENT en {s['language']}. 
-        INTERDICTION de répondre en français, même si l'élève te parle en français.
-        Si Niveau Primaire: phrases de 3 mots maximum.
-        CORRECTIONS: Écris tes corrections en français UNIQUEMENT après le mot 'Correction:'."""
+        # PROMPT DE DIALOGUE (Immersion)
+        adapt_prompt = f"""Tu es un tuteur de {s['language']} (Niveau {s['level']}). 
+        MISSION: {s['custom_prompt']}. PARLE UNIQUEMENT EN {s['language']}.
+        Si Niveau Primaire: phrases très courtes.
+        CORRECTIONS: Toujours après 'Correction:' en français."""
 
         html_code = f"""
-        <div style="background:#f9f9f9; padding:15px; border-radius:10px; border:1px solid #ddd;">
-            <div id="status" style="color:blue; font-weight:bold; margin-bottom:5px;">Système prêt</div>
-            <div id="chat" style="height:250px; overflow-y:auto; margin-bottom:10px; padding:10px; background:white; border-radius:5px; border:1px solid #eee;"></div>
-            <button id="go" style="width:100%; padding:20px; background:#dc3545; color:white; border:none; border-radius:10px; cursor:pointer; font-weight:bold; font-size:1.1em;">🎤 CLIQUE ET PARLE</button>
+        <div style="background:#f9f9f9; padding:15px; border-radius:10px; border:1px solid #ddd; text-align:center;">
+            <div id="status" style="color:blue; font-weight:bold; margin-bottom:10px;">Système Prêt</div>
+            <div id="chat" style="height:250px; overflow-y:auto; margin-bottom:10px; padding:10px; background:white; text-align:left; border:1px solid #eee;"></div>
+            <button id="go" style="width:100%; padding:20px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">🎤 CLIQUE ET PARLE</button>
         </div>
         <script>
             const API_KEY = "{st.secrets['OPENAI_API_KEY']}";
@@ -101,61 +101,76 @@ elif st.session_state.role == "Élève":
             const btn = document.getElementById('go');
             const chat = document.getElementById('chat');
             const status = document.getElementById('status');
-            const synth = window.speechSynthesis;
             const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
             rec.lang = "{rec_l}";
 
             async function talk(txt) {{
-                status.innerText = "L'IA réfléchit en {s['language']}...";
+                status.innerText = "L'IA réfléchit...";
                 if(txt) msgs.push({{role: "user", content: txt}});
-                else msgs.push({{role: "user", content: "START MISSION IN {s['language']} NOW."}});
+                else msgs.push({{role: "user", content: "LANCE LA MISSION EN {s['language']}."}});
                 
-                try {{
-                    const r = await fetch('https://api.openai.com/v1/chat/completions', {{
-                        method: 'POST',
-                        headers: {{ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY }},
-                        body: JSON.stringify({{ model: "gpt-4o-mini", messages: msgs }})
-                    }});
-                    const d = await r.json();
-                    const reply = d.choices[0].message.content;
-                    msgs.push({{role: "assistant", content: reply}});
-                    
-                    chat.innerHTML += `<p style="margin:5px 0;"><b>Tuteur:</b> ${{reply.replace('Correction:', '<br><small style="color:red; font-style:italic;">Correction:</small>')}}</p>`;
-                    chat.scrollTop = chat.scrollHeight;
-                    
-                    const u = new SpeechSynthesisUtterance(reply.split('Correction:')[0]);
-                    u.lang = "{tts_l}";
-                    synth.speak(u);
-                    status.innerText = "À toi de répondre !";
-                    btn.innerText = "🎤 CLIQUE ET RÉPONDS";
-                }} catch(e) {{ status.innerText = "Erreur réseau."; }}
+                const r = await fetch('https://api.openai.com/v1/chat/completions', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY }},
+                    body: JSON.stringify({{ model: "gpt-4o-mini", messages: msgs }})
+                }});
+                const d = await r.json();
+                const reply = d.choices[0].message.content;
+                msgs.push({{role: "assistant", content: reply}});
+                chat.innerHTML += `<p><b>Tuteur:</b> ${{reply.replace('Correction:', '<br><small style="color:red;">Correction:</small>')}}</p>`;
+                chat.scrollTop = chat.scrollHeight;
+                
+                const u = new SpeechSynthesisUtterance(reply.split('Correction:')[0]);
+                u.lang = "{tts_l}";
+                window.speechSynthesis.speak(u);
+                status.innerText = "À toi !";
             }}
 
             btn.onclick = () => {{
-                synth.cancel();
                 if(msgs.length === 1) talk(null);
-                else {{ 
-                    rec.start(); 
-                    status.innerText = "Écoute en cours..."; 
-                    btn.innerText = "JE T'ÉCOUTE...";
-                }}
+                else {{ rec.start(); status.innerText = "Écoute..."; }}
             }};
 
             rec.onresult = (e) => {{
                 const t = e.results[0][0].transcript;
-                chat.innerHTML += `<p style="text-align:right; color:blue; margin:5px 0;"><b>Moi:</b> ${{t}}</p>`;
+                chat.innerHTML += `<p style="text-align:right;"><b>Moi:</b> ${{t}}</p>`;
                 talk(t);
             }};
         </script>
         """
-        st.components.v1.html(html_code, height=500)
+        st.components.v1.html(html_code, height=480)
 
-        # --- EVALUATION (Rappel Barème Strict) ---
+        # --- EVALUATION CONFORME GRILLE ABCD PAGE 4 ---
         st.divider()
-        trans = st.text_area("Copie le dialogue pour ton bilan final :")
-        if st.button("🏁 Générer mon Bilan FWB"):
-            eval_p = f"Examine {user_name} (Niveau {s['level']}) via ABCD. Barème strict: 1xC=8/20, 2xC ou 1xD=6/20. Tutoie l'élève."
-            res = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": f"{eval_p} Dialogue: {trans}"}])
-            st.info(res.choices[0].message.content)
-            pdf = create_pdf(user_name, s['level'], s['topic'], res.choices[0].message.content)
-            st.download_button("📥 Télécharger le PDF", pdf, f"Bilan_{user_name}.pdf")
+        trans = st.text_area("Copie le dialogue pour l'évaluation :", height=150)
+        if st.button("🏁 Générer mon Bilan Officiel FWB"):
+            with st.spinner("Analyse selon la Grille ABCD..."):
+                eval_prompt = f"""Tu es un examinateur officiel de la Fédération Wallonie-Bruxelles.
+                Evalue {user_name} sur ce dialogue selon les critères ABCD du document fourni.
+                Niveau cible: {s['level']}. Sujet: {s['topic']}.
+                
+                BARÈME MATHÉMATIQUE STRICT (Page 4) :
+                - Si A ou B partout : Note sur 20 (>=10/20).
+                - 1 x C = 8/20.
+                - 2 x C ou 1 x D = 6/20.
+                - 3 x C ou 2 x D = 4/20.
+                
+                TON BILAN DOIT CONTENIR :
+                1. Un tableau ABCD pour les 4 critères.
+                2. La note sur 20 justifiée par le barème ci-dessus.
+                3. Un coaching bienveillant (tutoie l'élève).
+                4. 3 pistes de progrès."""
+                
+                res = client.chat.completions.create(
+                    model="gpt-4o-mini", 
+                    messages=[{"role": "user", "content": f"{eval_prompt} Dialogue: {trans}"}]
+                )
+                bilan_final = res.choices[0].message.content
+                st.markdown(bilan_final)
+                
+                pdf = create_pdf(user_name, s['level'], s['topic'], bilan_final)
+                st.download_button("📥 Télécharger mon PDF", pdf, f"Bilan_{user_name}.pdf")
+                
+                m = s['teacher_email']
+                link = f"mailto:{m}?subject=Bilan%20FWB%20{user_name}"
+                st.markdown(f'<a href="{link}" target="_blank"><div style="background:#28a745; color:white; padding:15px; border-radius:10px; text-align:center;">📧 Envoyer au professeur</div></a>', unsafe_allow_html=True)
