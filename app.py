@@ -30,7 +30,6 @@ def create_pdf(user_name, level, topic, evaluation_text):
     pdf.cell(200, 8, txt=f"Eleve : {user_name} | Niveau : {level} | Sujet : {topic}", ln=True)
     pdf.ln(5)
     pdf.set_font("Arial", size=10)
-    # Nettoyage pour format PDF
     clean_text = evaluation_text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 7, txt=clean_text)
     return pdf.output(dest='S').encode('latin-1')
@@ -79,11 +78,9 @@ elif st.session_state.role == "Élève":
     if not user_name:
         st.info("👈 Entre ton prénom pour commencer.")
     else:
-        # Langues micro et synthèse
         rec_l = "en-US" if s['language'] == "English" else "nl-BE"
         tts_l = "en-US" if s['language'] == "English" else "nl-NL"
         
-        # PROMPT DE DIALOGUE (Immersion)
         adapt_prompt = f"""Tu es un tuteur de {s['language']} (Niveau {s['level']}). 
         MISSION: {s['custom_prompt']}. PARLE UNIQUEMENT EN {s['language']}.
         Si Niveau Primaire: phrases très courtes.
@@ -101,34 +98,44 @@ elif st.session_state.role == "Élève":
             const btn = document.getElementById('go');
             const chat = document.getElementById('chat');
             const status = document.getElementById('status');
+            const synth = window.speechSynthesis;
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
             rec.lang = "{rec_l}";
 
             async function talk(txt) {{
+                if (audioCtx.state === 'suspended') {{ audioCtx.resume(); }}
                 status.innerText = "L'IA réfléchit...";
                 if(txt) msgs.push({{role: "user", content: txt}});
                 else msgs.push({{role: "user", content: "LANCE LA MISSION EN {s['language']}."}});
                 
-                const r = await fetch('https://api.openai.com/v1/chat/completions', {{
-                    method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY }},
-                    body: JSON.stringify({{ model: "gpt-4o-mini", messages: msgs }})
-                }});
-                const d = await r.json();
-                const reply = d.choices[0].message.content;
-                msgs.push({{role: "assistant", content: reply}});
-                chat.innerHTML += `<p><b>Tuteur:</b> ${{reply.replace('Correction:', '<br><small style="color:red;">Correction:</small>')}}</p>`;
-                chat.scrollTop = chat.scrollHeight;
-                
-                const u = new SpeechSynthesisUtterance(reply.split('Correction:')[0]);
-                u.lang = "{tts_l}";
-                window.speechSynthesis.speak(u);
-                status.innerText = "À toi !";
+                try {{
+                    const r = await fetch('https://api.openai.com/v1/chat/completions', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY }},
+                        body: JSON.stringify({{ model: "gpt-4o-mini", messages: msgs }})
+                    }});
+                    const d = await r.json();
+                    const reply = d.choices[0].message.content;
+                    msgs.push({{role: "assistant", content: reply}});
+                    chat.innerHTML += `<p><b>Tuteur:</b> ${{reply.replace('Correction:', '<br><small style="color:red;">Correction:</small>')}}</p>`;
+                    chat.scrollTop = chat.scrollHeight;
+                    
+                    synth.cancel();
+                    const u = new SpeechSynthesisUtterance(reply.split('Correction:')[0]);
+                    u.lang = "{tts_l}";
+                    u.onend = () => {{ status.innerText = "À toi !"; }};
+                    setTimeout(() => {{ synth.speak(u); }}, 100);
+                }} catch(e) {{ status.innerText = "Erreur de connexion."; }}
             }}
 
             btn.onclick = () => {{
+                if (audioCtx.state === 'suspended') {{ audioCtx.resume(); }}
                 if(msgs.length === 1) talk(null);
-                else {{ rec.start(); status.innerText = "Écoute..."; }}
+                else {{ 
+                    try {{ rec.start(); status.innerText = "Écoute..."; }} 
+                    catch(e) {{ console.log("Déjà actif"); }}
+                }}
             }};
 
             rec.onresult = (e) => {{
