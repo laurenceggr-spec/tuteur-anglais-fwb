@@ -18,7 +18,7 @@ if "class_settings" not in st.session_state:
         "session_code": "LAB2026",
         "teacher_email": "", 
         "vocab": "Apple, Banana, Milk, I like",
-        "custom_prompt": "Fais semblant d'être un serveur dans un café."
+        "custom_prompt": "Tu es un serveur dans un café."
     }
 
 def create_pdf(user_name, level, topic, evaluation_text):
@@ -74,7 +74,7 @@ elif st.session_state.role == "Professeur":
     st.divider()
     col_a, col_b = st.columns([1, 2])
     with col_a:
-        qr = qrcode.make("https://tuteur-anglais-fwb.streamlit.app") 
+        qr = qrcode.make("https://tuteur-anglais.streamlit.app") 
         buf = BytesIO(); qr.save(buf)
         st.image(buf, width=150, caption="Scan QR Code")
     with col_b:
