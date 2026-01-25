@@ -66,7 +66,7 @@ elif st.session_state.role == "Professeur":
 
     st.divider()
     st.subheader("🔗 Partage")
-    qr = qrcode.make("https://tuteur-anglais.app") 
+    qr = qrcode.make("https://tuteur-anglais.streamlit.app") 
     buf = BytesIO(); qr.save(buf)
     st.image(buf, width=150, caption="QR Code Elève")
 
