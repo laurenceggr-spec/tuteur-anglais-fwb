@@ -8,7 +8,6 @@ from openai import OpenAI
 st.set_page_config(page_title="Language Lab FWB Pro", layout="wide")
 client = OpenAI(api_key=st.secrets.get("OPENAI_API_KEY", ""))
 
-# INITIALISATION : On vérifie si les réglages existent, sinon on met les valeurs par défaut
 if "class_settings" not in st.session_state:
     st.session_state.class_settings = {
         "language": "English", 
@@ -44,16 +43,27 @@ if "role" not in st.session_state:
 
 # --- INTERFACE PROFESSEUR ---
 elif st.session_state.role == "Professeur":
-    st.title("👨‍🏫 Configuration du Laboratoire")
+    st.title("👨‍🏫 Tableau de Bord Enseignant")
     
-    # On récupère les valeurs actuelles pour pré-remplir le formulaire
-    current = st.session_state.class_settings
+    # --- SECTION FIXE : ACCÈS ÉLÈVES (TOUJOURS VISIBLE) ---
+    col_a, col_b = st.columns([1, 2])
+    with col_a:
+        # Remplacez par votre URL réelle une fois déployé
+        qr = qrcode.make("https://tuteur-anglais-fwb.streamlit.app") 
+        buf = BytesIO(); qr.save(buf)
+        st.image(buf, width=150, caption="Scan pour rejoindre")
+    with col_b:
+        st.success(f"### 🔑 CODE DE SESSION : **{st.session_state.class_settings['session_code']}**")
+        st.info(f"**Sujet actuel :** {st.session_state.class_settings['topic']} | **Mode :** {st.session_state.class_settings['mode']}")
 
+    st.divider()
+
+    # --- SECTION FORMULAIRE : CONFIGURATION ---
+    st.subheader("⚙️ Modifier les paramètres de la classe")
+    current = st.session_state.class_settings
     with st.form("config_pro"):
         col1, col2 = st.columns(2)
         levels = ["Primaire (Initiation/A1)", "S1-S2 (Vers A2.1)", "S3-S4 (Vers A2.2/B1)"]
-        
-        # Formulaire avec index dynamique
         new_lvl = col1.selectbox("Degré / Niveau :", levels, index=levels.index(current["level"]))
         new_lang = col1.selectbox("Langue :", ["English", "Nederlands"], index=0 if current["language"]=="English" else 1)
         modes = ["Tuteur (Dialogue IA)", "Solo (Expression continue)", "Jeu de rôle", "Examen oral"]
@@ -63,43 +73,35 @@ elif st.session_state.role == "Professeur":
         new_sess_code = col2.text_input("Code secret session :", value=current["session_code"])
         new_mail = col2.text_input("Email enseignant :", value=current["teacher_email"])
         
-        st.divider()
         new_voc = st.text_area("Vocabulaire attendu :", value=current["vocab"])
         new_mission = st.text_area("🎯 MISSION DU TUTEUR :", value=current["custom_prompt"])
         
-        if st.form_submit_button("✅ PUBLIER LES CHANGEMENTS"):
-            # MISE À JOUR CRITIQUE DE LA MÉMOIRE
+        if st.form_submit_button("✅ APPLIQUER ET DIFFUSER"):
             st.session_state.class_settings = {
                 "language": new_lang, "level": new_lvl, "topic": new_topic, 
                 "session_code": new_sess_code, "teacher_email": new_mail, 
                 "vocab": new_voc, "custom_prompt": new_mission, "mode": new_mode
             }
-            st.success(f"Session mise à jour sur le thème : {new_topic}")
-            st.rerun() # Recharger l'app pour valider les changements
-
-    st.divider()
-    # Affichage récapitulatif pour être sûr que ça a marché
-    st.info(f"**Configuration active :** {st.session_state.class_settings['topic']} ({st.session_state.class_settings['language']})")
+            st.rerun() # Rafraîchit tout pour mettre à jour le QR et le Code en haut
 
 # --- INTERFACE ÉLÈVE ---
 elif st.session_state.role == "Élève":
-    s = st.session_state.class_settings # On utilise les réglages TOUT JUSTE mis à jour
+    s = st.session_state.class_settings
     st.title(f"🗣️ Labo : {s['topic']}")
     
     user_name = st.sidebar.text_input("Ton Prénom :")
     input_code = st.sidebar.text_input("Code de session :")
     
     if not user_name or input_code != s['session_code']:
-        st.warning(f"👈 Entre ton prénom et le code de session donné par le prof.")
+        st.warning(f"👈 Entre ton prénom et le code affiché au tableau.")
     else:
         rec_l = "en-US" if s['language'] == "English" else "nl-BE"
         t_l = "en-US" if s['language'] == "English" else "nl-NL"
         
-        # Construction dynamique du prompt (inclut bien le nouveau thème)
         adapt_prompt = (
             f"Tu es un tuteur de {s['language']} ({s['level']}). "
-            f"THÈME ACTUEL: {s['topic']}. MISSION: {s['custom_prompt']}. "
-            f"MODE: {s['mode']}. VOCABULAIRE CIBLE: {s['vocab']}. "
+            f"THÈME: {s['topic']}. MISSION: {s['custom_prompt']}. "
+            f"MODE: {s['mode']}. VOCABULAIRE: {s['vocab']}. "
             f"Parle UNIQUEMENT en {s['language']}. Sois bienveillant (Référentiel FWB)."
         )
 
@@ -163,19 +165,19 @@ elif st.session_state.role == "Élève":
         st.components.v1.html(html_code, height=480)
 
         st.divider()
-        trans = st.text_area("Copie le dialogue pour l'évaluation :", height=150)
+        trans = st.text_area("Dialogue pour l'évaluation :", height=150)
         
         if st.button("🏁 Générer mon Bilan Officiel FWB"):
-            with st.spinner("Analyse avec les nouveaux critères..."):
+            with st.spinner("Analyse pédagogique en cours..."):
                 est_solo = s['mode'] == "Solo (Expression continue)"
                 t_oral = "CONTINU (EOC)" if est_solo else "INTERACTION (EOI)"
                 
-                # Évaluation dynamique basée sur les réglages actuels
-                eval_p = f"""Expert FWB. Évalue {user_name} ({s['level']}) - Expression {t_oral}.
-                Thème évalué : {s['topic']}.
-                CRITÈRES : Compréhensibilité et Pertinence (CE1D 2024).
+                eval_p = f"""Expert FWB (Tronc Commun). Évalue {user_name} ({s['level']}) - Expression {t_oral}.
+                Thème : {s['topic']}.
+                CRITÈRES (CE1D 2024) : Compréhensibilité et Pertinence.
                 BIENVEILLANCE : Si communication réussie : Note > 12/20.
-                BARÈME : 1xC=8/20, 2xC/1xD=6/20."""
+                BARÈME : 1xC=8/20, 2xC/1xD=6/20.
+                Affiche le tableau ABCD et un feedback."""
 
                 res = client.chat.completions.create(
                     model="gpt-4o-mini", 
