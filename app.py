@@ -23,7 +23,7 @@ if "class_settings" not in st.session_state:
         "custom_prompt": "Fais semblant d'être un serveur dans un café. Demande à l'élève ce qu'il veut manger et boire pour son petit-déjeuner."
     }
 
-# --- FONCTION PDF (Notation FWB ABCD) ---
+# --- FONCTION PDF (Notation FWB ABCD Strict) ---
 def create_pdf(user_name, level, topic, evaluation_text):
     pdf = FPDF()
     pdf.add_page()
@@ -61,8 +61,7 @@ elif st.session_state.role == "Professeur":
         
         st.divider()
         voc = st.text_area("Attendus spécifiques (Lexique/Grammaire) :", value=st.session_state.class_settings["vocab"])
-        mission = st.text_area("🎯 MISSION DU TUTEUR (L'IA l'utilisera pour lancer le dialogue) :", 
-                               value=st.session_state.class_settings["custom_prompt"])
+        mission = st.text_area("🎯 MISSION DU TUTEUR :", value=st.session_state.class_settings["custom_prompt"])
         
         if st.form_submit_button("✅ Enregistrer et Publier"):
             st.session_state.class_settings.update({"language": lang, "level": lvl, "topic": topic, "teacher_email": mail, "vocab": voc, "custom_prompt": mission})
@@ -70,7 +69,7 @@ elif st.session_state.role == "Professeur":
             st.rerun()
     st.divider()
     qr = qrcode.make("https://tuteur-anglais.streamlit.app")
-    buf = BytesIO(); qr.save(buf); st.image(buf, width=150, caption="Scanner pour l'élève")
+    buf = BytesIO(); qr.save(buf); st.image(buf, width=150)
 
 # --- INTERFACE ÉLÈVE ---
 elif st.session_state.role == "Élève":
@@ -80,38 +79,48 @@ elif st.session_state.role == "Élève":
     if not user_name:
         st.info("👈 Entre ton prénom pour commencer.")
     else:
-        st.title(f"🗣️ Sujet : {s['topic']}")
+        st.title(f"🗣️ Activité : {s['topic']}")
         
         rec_l = "en-US" if s['language'] == "English" else "nl-BE"
         tts_l = "en-US" if s['language'] == "English" else "nl-NL"
         
         adapt_prompt = f"""Tu es un tuteur de {s['language']} niveau {s['level']}. 
         MISSION: {s['custom_prompt']}. 
-        RÈGLE: Utilise ta MISSION pour poser une question TRÈS COURTE sur {s['topic']}.
-        Si Niveau=Primaire: phrases de 3-4 mots max.
-        CORRECTIONS: Écris après 'Correction:', mais ne les lis pas oralement."""
+        IMPORTANT: Ne dis jamais 'Hello how are you'. Entre directement dans le sujet avec ta MISSION.
+        Niveau Primaire: phrases de 3-4 mots.
+        CORRECTIONS: Écris après 'Correction:', mais ne les lis pas."""
 
         html_code = f"""
-        <div style="background:#ffffff; padding:20px; border-radius:15px; border: 2px solid #007bff;">
-            <div id="chatbox" style="height:250px; overflow-y:auto; margin-bottom:15px; font-family:sans-serif; border-bottom:1px solid #eee;">
-                <p style="color:blue;"><b>Système:</b> Clique sur le micro pour que l'IA te parle !</p>
+        <div style="background:#ffffff; padding:20px; border-radius:15px; border: 2px solid #007bff; text-align:center;">
+            <div id="status-mic" style="margin-bottom:10px; font-weight:bold; color:#dc3545;">Micro Inactif</div>
+            <div id="chatbox" style="height:250px; overflow-y:auto; margin-bottom:15px; font-family:sans-serif; text-align:left; border-bottom:1px solid #eee;">
+                <p style="color:gray;">Clique sur le gros bouton pour lancer la discussion avec l'IA.</p>
             </div>
-            <button id="btn-mic" style="width:100%; padding:20px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer; font-size:1.2em;">🎤 CLIQUE ET PARLE</button>
+            <button id="btn-mic" style="width:100%; padding:25px; background:#dc3545; color:white; border:none; border-radius:15px; font-weight:bold; cursor:pointer; font-size:1.3em; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">🎤 CLIQUE ET PARLE</button>
         </div>
         <script>
             const API_KEY = "{st.secrets['OPENAI_API_KEY']}";
             let messages = [{{role: "system", content: "{adapt_prompt}"}}];
             const box = document.getElementById('chatbox');
             const btn = document.getElementById('btn-mic');
+            const status = document.getElementById('status-mic');
             const synth = window.speechSynthesis;
-            const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            
+            if (!SpeechRecognition) {{
+                btn.innerText = "Navigateur non compatible (Utilise Chrome)";
+            }}
+
+            const rec = new SpeechRecognition();
             rec.lang = "{rec_l}";
             rec.continuous = false;
-            rec.interimResults = false;
 
             async function askIA(userInput) {{
-                if(userInput) messages.push({{role: "user", content: userInput}});
-                else messages.push({{role: "user", content: "Lance la mission stp."}});
+                if (userInput) {{
+                    messages.push({{role: "user", content: userInput}});
+                }} else {{
+                    messages.push({{role: "user", content: "Bonjour, lance la mission."}});
+                }}
 
                 const r = await fetch('https://api.openai.com/v1/chat/completions', {{
                     method: 'POST',
@@ -122,7 +131,7 @@ elif st.session_state.role == "Élève":
                 const reply = d.choices[0].message.content;
                 messages.push({{role: "assistant", content: reply}});
                 
-                box.innerHTML += `<p style="text-align:left; background:#f1f1f1; padding:10px; border-radius:10px; margin:5px 0;">IA: ${{reply.replace('Correction:', '<br><i style="color:red;">Correction:</i>')}}</p>`;
+                box.innerHTML += `<p style="background:#f1f1f1; padding:10px; border-radius:10px; margin:5px 0;">IA: ${{reply.replace('Correction:', '<br><b style="color:red;">Correction:</b>')}}</p>`;
                 box.scrollTop = box.scrollHeight;
 
                 synth.cancel();
@@ -132,46 +141,68 @@ elif st.session_state.role == "Élève":
             }}
 
             btn.onclick = () => {{
-                synth.speak(new SpeechSynthesisUtterance("")); // Débloque l'audio
-                btn.style.background = "#28a745";
-                btn.innerText = "ÉCOUTE EN COURS...";
+                // Unlock Audio
+                synth.speak(new SpeechSynthesisUtterance(""));
+                
+                // Si c'est le tout premier clic, on lance l'IA directement
+                if (messages.length === 1) {{
+                    status.innerText = "Lancement de la mission...";
+                    status.style.color = "blue";
+                    askIA(null);
+                }}
+
                 try {{
                     rec.start();
+                    status.innerText = "Micro Activé : Je t'écoute...";
+                    status.style.color = "#28a745";
+                    btn.style.background = "#28a745";
                 }} catch(e) {{
-                    console.log("Re-clic");
+                    console.log("Rec déjà actif");
                 }}
             }};
 
             rec.onresult = (e) => {{
                 const text = e.results[0][0].transcript;
                 box.innerHTML += `<p style="text-align:right; margin:5px 0;"><b>${{text}}</b></p>`;
+                status.innerText = "Analyse en cours...";
+                status.style.color = "orange";
                 btn.style.background = "#dc3545";
-                btn.innerText = "🎤 CLIQUE ET PARLE";
                 askIA(text);
             }};
 
-            rec.onerror = (err) => {{
+            rec.onerror = (event) => {{
                 btn.style.background = "#dc3545";
-                btn.innerText = "🎤 ERREUR MICRO (Réessaye)";
-                // Si c'est le premier clic et que ça rate, on lance quand même l'IA
-                if(messages.length === 1) askIA(null);
+                if(event.error === 'not-allowed') {{
+                    status.innerText = "ERREUR : Micro bloqué par le navigateur !";
+                }} else {{
+                    status.innerText = "Micro en attente...";
+                }}
+            }};
+
+            rec.onend = () => {{
+                btn.style.background = "#dc3545";
+                if(status.innerText.includes("écoute")) status.innerText = "Micro en attente...";
             }};
         </script>
         """
-        st.components.v1.html(html_code, height=450)
+        st.components.v1.html(html_code, height=500)
 
-        # --- EVALUATION ---
+        # --- EVALUATION STRICTE PAGE 4 ---
         st.divider()
-        transcription = st.text_area("Copie ton dialogue ici pour le bilan :")
-        if st.button("🏁 Générer mon Bilan Officiel"):
-            with st.spinner("Analyse..."):
+        transcription = st.text_area("Copie ton dialogue ici pour ton bilan final :")
+        if st.button("🏁 Générer mon Rapport Officiel"):
+            with st.spinner("Analyse pédagogique..."):
                 eval_p = f"""Tu es un examinateur FWB. Tutoie l'élève (Niveau {s['level']}).
-                Applique ABCD. BARÈME STRICT : $1 \\times C = 8/20$, $2 \\times C$ ou $1 \\times D = 6/20$.
-                Sois encourageant."""
+                Applique ABCD. BARÈME MATHÉMATIQUE STRICT (PAGE 4) :
+                - Si A ou B partout : Note entre 10 et 20/20.
+                - 1 x C = 8/20.
+                - 2 x C ou 1 x D = 6/20.
+                - 3 x C ou 2 x D = 4/20.
+                Sois bienveillant et donne 3 pistes concrètes de travail."""
                 res = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": f"{eval_p} Dialogue: {transcription}"}])
                 bilan = res.choices[0].message.content
                 pdf = create_pdf(user_name, s['level'], s['topic'], bilan)
-                st.download_button("📥 Télécharger le PDF", pdf, f"Bilan_{user_name}.pdf")
+                st.download_button("📥 Télécharger mon Bilan PDF", pdf, f"Bilan_{user_name}.pdf")
                 m = s['teacher_email']
-                link = f"mailto:{m}?subject=Bilan%20{user_name}&body=Mon%20bilan%20en%20annexe."
+                link = f"mailto:{m}?subject=Bilan%20Labo%20-%20{user_name}&body=Voici%20mon%20bilan."
                 st.markdown(f'<a href="{link}" target="_blank"><div style="background:#28a745; color:white; padding:15px; border-radius:10px; text-align:center;">📧 Envoyer au professeur ({m})</div></a>', unsafe_allow_html=True)
