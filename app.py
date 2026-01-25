@@ -30,21 +30,17 @@ def create_pdf(user_name, level, topic, evaluation_text):
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(200, 10, txt="Bilan d'Evaluation Officiel - Tronc Commun FWB", ln=True, align='C')
-    
     pdf.set_font("Arial", size=11)
     pdf.ln(10)
     pdf.cell(200, 8, txt=f"Eleve : {user_name}", ln=True)
     pdf.cell(200, 8, txt=f"Niveau Cible : {level} | Sujet : {topic}", ln=True)
     pdf.cell(200, 8, txt=f"Date : {time.strftime('%d/%m/%Y %H:%M')}", ln=True)
-    
     pdf.ln(10)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(200, 10, txt="Analyse des competences (Grille ABCD) :", ln=True)
-    
     pdf.set_font("Arial", size=10)
     clean_text = evaluation_text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 7, txt=clean_text)
-    
     pdf.ln(10)
     pdf.set_font("Arial", 'I', 9)
     pdf.multi_cell(0, 5, txt="Base sur le Referentiel des Langues Modernes et la grille ABCD officielle.")
@@ -70,7 +66,6 @@ elif st.session_state.role == "Professeur":
             mail = col2.text_input("Email prof :", value=st.session_state.class_settings["teacher_email"])
             voc = col2.text_area("Attendus (Lexique/Grammaire) :", value=st.session_state.class_settings["vocab"])
             custom_p = st.text_area("Mission du tuteur (Prompt) :", value=st.session_state.class_settings["custom_prompt"])
-            
             if st.form_submit_button("Mettre à jour la session"):
                 st.session_state.class_settings.update({"language": lang, "level": lvl, "mode": mode, "topic": topic, "teacher_email": mail, "vocab": voc, "custom_prompt": custom_p})
         
@@ -78,7 +73,6 @@ elif st.session_state.role == "Professeur":
         st.subheader("📲 Accès Élèves")
         cA, cB = st.columns([1, 2])
         with cA:
-            # CORRECTION 1 : Mise à jour de l'URL
             qr = qrcode.make("https://tuteur-anglais.streamlit.app")
             buf = BytesIO(); qr.save(buf); st.image(buf, width=200)
         with cB: st.metric("CODE SESSION", st.session_state.class_settings["session_code"])
@@ -97,12 +91,11 @@ elif st.session_state.role == "Élève":
             st.warning("👈 Écris ton prénom à gauche.")
         else:
             st.title(f"🗣️ Activité : {s['topic']}")
-            
             rec_l = "en-US" if s['language'] == "English" else "nl-BE"
             tts_l = "en-US" if s['language'] == "English" else "nl-NL"
             mode_prompt = f"Tuteur {s['language']} niveau {s['level']}. Mission: {s['custom_prompt']}. Mode: {s['mode']}."
 
-            # CORRECTION 2 : Optimisation robuste de la voix (JS)
+            # JAVASCRIPT CORRIGÉ POUR L'AUDIO
             html_code = f"""
             <div style="background:#ffffff; padding:20px; border-radius:15px; border: 2px solid #007bff;">
                 <div id="chatbox" style="height:300px; overflow-y:auto; margin-bottom:15px; font-family:sans-serif;"></div>
@@ -110,13 +103,23 @@ elif st.session_state.role == "Élève":
             </div>
             <script>
                 const API_KEY = "{st.secrets['OPENAI_API_KEY']}";
-                let messages = [{{role: "system", content: "{mode_prompt} Réponds oralement. Ecris les corrections après la mention 'Correction:'."}}];
+                let messages = [{{role: "system", content: "{mode_prompt} Réponds oralement. Corrections écrites après 'Correction:'."}}];
                 const box = document.getElementById('chatbox');
                 const btn = document.getElementById('btn-mic');
-                
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 const synth = window.speechSynthesis;
+                let audioUnlocked = false;
 
+                // Fonction pour débloquer l'audio sur mobile/navigateur strict
+                function unlockAudio() {{
+                    if (!audioUnlocked) {{
+                        const silence = new SpeechSynthesisUtterance("");
+                        synth.speak(silence);
+                        audioUnlocked = true;
+                        console.log("Audio débloqué");
+                    }}
+                }}
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 if (!SpeechRecognition) {{
                     btn.innerText = "Navigateur non compatible";
                 }} else {{
@@ -124,12 +127,11 @@ elif st.session_state.role == "Élève":
                     rec.lang = "{rec_l}";
 
                     btn.onclick = () => {{
+                        unlockAudio(); // Important : débloque au premier clic
                         try {{
                             rec.start();
                             btn.style.background = "#28a745";
                             btn.innerText = "Écoute en cours...";
-                            // Réveil forcé de la synthèse vocale (sécurité navigateur)
-                            synth.resume();
                         }} catch (e) {{ console.log("Déjà actif"); }}
                     }};
 
@@ -137,7 +139,6 @@ elif st.session_state.role == "Élève":
                         const text = e.results[0][0].transcript;
                         btn.style.background = "#dc3545";
                         btn.innerText = "🎤 CLIQUE ET PARLE";
-                        
                         box.innerHTML += `<p style="text-align:right; color:#007bff;"><b>${{text}}</b></p>`;
                         messages.push({{role: "user", content: text}});
 
@@ -149,16 +150,22 @@ elif st.session_state.role == "Élève":
                         const d = await r.json();
                         const reply = d.choices[0].message.content;
                         messages.push({{role: "assistant", content: reply}});
-                        
                         box.innerHTML += `<p style="text-align:left; background:#f1f1f1; padding:10px; border-radius:10px;">IA: ${{reply}}</p>`;
                         box.scrollTop = box.scrollHeight;
 
-                        // --- LOGIQUE VOCALE RENFORCÉE ---
-                        synth.cancel(); // Stoppe toute parole en cours pour éviter les bugs
+                        // PAROLE DE L'IA
+                        synth.cancel(); // Arrête tout ce qui est en cours
                         const u = new SpeechSynthesisUtterance(reply.split('Correction:')[0]);
                         u.lang = "{tts_l}";
-                        u.rate = 0.9; // Vitesse légèrement réduite pour la clarté pédagogique
+                        
+                        // Sécurité pour Chrome qui "oublie" parfois de parler
+                        u.onstart = () => {{ console.log("L'IA commence à parler"); }};
+                        u.onerror = (err) => {{ console.error("Erreur de voix:", err); }};
+                        
                         synth.speak(u);
+                        
+                        // Correction bug de pause infinie sur Chrome
+                        if (synth.paused) {{ synth.resume(); }}
                     }};
 
                     rec.onerror = () => {{
@@ -173,21 +180,17 @@ elif st.session_state.role == "Élève":
             # --- EVALUATION FWB ---
             st.divider()
             transcription = st.text_area("Copie ton dialogue ici pour le bilan final :")
-            
             if st.button("🏁 Générer mon Rapport Officiel (Référentiel FWB)"):
                 with st.spinner("Analyse..."):
                     prompt_fwb = f"""Evalue cette session de {user_name} (Niveau {s['level']}).
                     Dialogue: {transcription}. Applique la grille ABCD FWB.
                     Note sur 5 par critère. Si un C ou D apparaît, applique le barème (1xC=8/20, 1xD=6/20...).
                     Rédige au TU."""
-                    
                     res = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": prompt_fwb}])
                     bilan_ia = res.choices[0].message.content
-                    
                     pdf_bytes = create_pdf(user_name, s['level'], s['topic'], bilan_ia)
                     st.success("✅ Rapport PDF prêt !")
                     st.download_button("📥 Télécharger mon PDF", pdf_bytes, f"Bilan_FWB_{user_name}.pdf", "application/pdf")
-                    
                     sujet = f"Evaluation Labo FWB - {user_name}"
                     corps = f"Bonjour, voici mon bilan PDF pour la session : {s['topic']}."
                     mail_link = f"mailto:{s['teacher_email']}?subject={urllib.parse.quote(sujet)}&body={urllib.parse.quote(corps)}"
